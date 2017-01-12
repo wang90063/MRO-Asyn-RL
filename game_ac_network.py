@@ -77,21 +77,6 @@ class GameACNetwork(object):
     bias   = tf.Variable(tf.random_uniform(bias_shape,   minval=-d, maxval=d))
     return weight, bias
 
-  def _conv_variable(self, weight_shape):
-    w = weight_shape[0]
-    h = weight_shape[1]
-    input_channels  = weight_shape[2]
-    output_channels = weight_shape[3]
-    d = 1.0 / np.sqrt(input_channels * w * h)
-    bias_shape = [output_channels]
-    weight = tf.Variable(tf.random_uniform(weight_shape, minval=-d, maxval=d))
-    bias   = tf.Variable(tf.random_uniform(bias_shape,   minval=-d, maxval=d))
-    return weight, bias
-
-  def _conv2d(self, x, W, stride):
-    return tf.nn.conv2d(x, W, strides = [1, stride, stride, 1], padding = "VALID")
-
-
 # Actor-Critic LSTM Network
 class GameACLSTMNetwork(GameACNetwork):
   def __init__(self,
@@ -103,7 +88,7 @@ class GameACLSTMNetwork(GameACNetwork):
     scope_name = "net_" + str(self._thread_index)
     with tf.device(self._device), tf.variable_scope(scope_name) as scope:
 
-      self.W_fc1, self.b_fc1 = self._fc_variable([88, 64]) # Feed the data of an agent into FC layer
+      self.W_fc1, self.b_fc1 = self._fc_variable([96, 64]) # Feed the data of an agent into FC layer
 
       # lstm
       self.lstm = tf.nn.rnn_cell.BasicLSTMCell(64, state_is_tuple=True)
@@ -115,7 +100,7 @@ class GameACLSTMNetwork(GameACNetwork):
       self.W_fc3, self.b_fc3 = self._fc_variable([64, 1])
 
       # state (input)
-      self.s = tf.placeholder("float", [None, 1, 88])
+      self.s = tf.placeholder("float", [None, 1, 96])
 
       h_fc1 = tf.nn.relu(tf.matmul(self.s, self.W_fc1) + self.b_fc1)
       # h_fc1 shape=(5,256)

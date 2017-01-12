@@ -9,19 +9,15 @@ from math import exp
 
 # frame params
 FPS = 30  # frames per second, the general speed of the program
-CELL_SIZE = 200  # size of cell height & width in pixels
-GAP_SIZE = 1  # size of gap between cells in pixels
-CELL_COLUMN = 2  # number of columns of cells
-CELL_ROW = 1  # number of rows of cells
-NUM_CELL = CELL_COLUMN * CELL_ROW  # num of cells
 
-WINDOW_WIDTH = int(CELL_COLUMN * (CELL_SIZE + GAP_SIZE))  # size of window's width in pixels
-WINDOW_HEIGHT = int(CELL_ROW * (CELL_SIZE + GAP_SIZE))  # size of windows' height in pixels
+# 400 pixels represent the largest distance of the area, i.e. 100m
+WINDOW_WIDTH = 400  # size of window's width in pixels
+WINDOW_HEIGHT = 400  # size of windows' height in pixels
 
-NUM_USER = 10
+Num_CELL = 7
+NUM_USER = 1 # In asynchronous deep Q learning, only one user in a thread
 white = Color("white")
 COLOR_LIST = list(white.range_to(Color("black"), 20))
-RESOURCE_LIST = [18, 2, 6, 10, 8, 6, 6, 10, 7, 10, 5, 7, 4, 8, 9, 5, 6, 5, 9]
 
 # RGB
 GRAY = (100, 100, 100)
@@ -35,19 +31,18 @@ YELLOW = (255, 255, 0)
 ORANGE = (255, 128, 0)
 PURPLE = (255, 0, 255)
 CYAN = (0, 255, 255)
-BG_COLOR = NAVY_BLUE
-CELL_COLOR = WHITE
+background_color = WHITE
 
 pygame.init()
 FPSCLOCK = pygame.time.Clock()
 DISPLAY_SURF = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-pygame.display.set_caption('MLB System Model')
+pygame.display.set_caption('MRO System Model')
 
 
 class SystemModel:
     def __init__(self, ):
         self.users = init_users()
-        self.cells = init_cells()
+        self.a = init_cells()
 
     def frame_step(self, input_action):
         pygame.event.pump()
@@ -76,7 +71,7 @@ class SystemModel:
         self.cells = update_load(self.users, self.cells)
 
         # draw frame
-        DISPLAY_SURF.fill(BG_COLOR)
+        DISPLAY_SURF.fill(background_color)
         outrage_ratio = [x[4] / x[3] for x in self.cells]
         outrage_ratio = [min(x, 1) for x in outrage_ratio]  # larger than 1 is outrage, use black color directly
         color_index = [int(x * len(COLOR_LIST)) for x in outrage_ratio]
@@ -135,14 +130,13 @@ def init_cells():
     :return: cell_list: (1)loc_x(left) (2)loc_y(top) (3)NO. (4)PRB number (5)load
     """
     # cell location
-    flatten_x = np.tile(np.arange(CELL_COLUMN), CELL_ROW)
-    flatten_y = np.repeat(np.arange(CELL_ROW), CELL_COLUMN)
-    cell_x = flatten_x * (CELL_SIZE + GAP_SIZE)
-    cell_y = flatten_y * (CELL_SIZE + GAP_SIZE)
+    cell_id = np.arange(Num_CELL)
 
-    cell_id = np.arange(NUM_CELL)
-    cell_PRB = np.array(RESOURCE_LIST[:NUM_CELL])
-    cell_load = np.zeros(NUM_CELL)
+    cell_x = [100, 100, ]
+    cell_y = []
+    for id in cell_id:
+
+
 
     cells = np.vstack((cell_x, cell_y, cell_id, cell_PRB, cell_load))
     return cells.T.astype(int)
