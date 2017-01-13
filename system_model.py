@@ -3,7 +3,6 @@ import sys
 import random
 import numpy as np
 from pygame.locals import *
-from colour import Color
 from collections import Counter
 from math import exp
 
@@ -13,11 +12,23 @@ FPS = 30  # frames per second, the general speed of the program
 # 400 pixels represent the largest distance of the area, i.e. 100m
 WINDOW_WIDTH = 400  # size of window's width in pixels
 WINDOW_HEIGHT = 400  # size of windows' height in pixels
+cell_radius = 25 # "m" this is the radius of cell
+resolution  = cell_radius * 4./WINDOW_WIDTH # meter/pixel, the longest distace in the simulation system is "cell_radius * 4"
+
+outlayer_userrange_x_low = 24.5 / resolution
+outlayer_userrange_x_high = 75.5 / resolution
+
+outlayer_userrange_y_low = 20 / resolution
+outlayer_userrange_y_high = 80 / resolution
+
+innerlayer_userange_x_low = 33 / resolution
+innerlayer_userange_x_high = 67 / resolution
+
+innerlayer_userange_y_low = 30 / resolution
+innerlayer_userange_y_high = 70 / resolution
 
 Num_CELL = 7
-NUM_USER = 1 # In asynchronous deep Q learning, only one user in a thread
-white = Color("white")
-COLOR_LIST = list(white.range_to(Color("black"), 20))
+NUM_USER = 1 # In asynchronous deep Q learning, only one user in one thread
 
 # RGB
 GRAY = (100, 100, 100)
@@ -38,11 +49,11 @@ FPSCLOCK = pygame.time.Clock()
 DISPLAY_SURF = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 pygame.display.set_caption('MRO System Model')
 
-
+# "action" is the "cell_id" selected by the agent
 class SystemModel:
-    def __init__(self, ):
-        self.users = init_users()
-        self.a = init_cells()
+    def __init__(self, action):
+        self.users = init_users(action)
+        self.cells = init_cells(self)
 
     def frame_step(self, input_action):
         pygame.event.pump()
@@ -68,7 +79,6 @@ class SystemModel:
 
         # update system states
         self.users = move_user(self.users)
-        self.cells = update_load(self.users, self.cells)
 
         # draw frame
         DISPLAY_SURF.fill(background_color)
@@ -94,7 +104,7 @@ class SystemModel:
         return image_data, reward
 
 
-def init_users():
+def init_users(self, action):
     """
     initialize user. every user consists of 4 params:
     (1) loc_x(center) (2) loc_y(center) (3) which cell user is in (4) user mobility type
@@ -102,88 +112,69 @@ def init_users():
     while medium and high takes 20% and 10%.
     :return: user: (1) loc_x(center) (2) loc_y(center) (3) which cell user is in (4) user mobility type
      """
-    user_x = np.random.randint(WINDOW_WIDTH, size=NUM_USER, dtype='int')
-    user_y = np.random.randint(WINDOW_HEIGHT, size=NUM_USER, dtype='int')
-    cell_id = which_cell(loc_x=user_x, loc_y=user_y)
-    mobility_type = np.random.choice([1, 5, 10], size=NUM_USER, p=[0.7, 0.2, 0.1])  # low(70%), medium(20%), high(10%)
-    users = np.vstack((user_x, user_y, cell_id, mobility_type))
+    while True:
+        user_x_tmp = np.random.randint(outlayer_userrange_x_low, outlayer_userrange_x_high+1, size=NUM_USER, dtype='int')
+        user_y_tmp = np.random.randint(outlayer_userrange_y_low, outlayer_userrange_y_high+1, size=NUM_USER, dtype='int')
+        if user_x_tmp < innerlayer_userange_x_low or user_x_tmp > innerlayer_userange_x_high or user_y_tmp < innerlayer_userange_y_low or user_y_tmp > innerlayer_userange_y_high:
+           self.user_x = user_x_tmp
+           self.user_y = user_y_tmp
+           break
+    servingcell_id = action
+    users = np.vstack((self.user_x, self.user_y, servingcell_id))
     return users.T
 
 
-def which_cell(loc_x, loc_y):
-    """
-    calculate which cell the user is in
-    :param loc_x:
-    :param loc_y:
-    :return: cell_id
-    """
-    column = np.ceil(loc_x / CELL_SIZE)
-    row = np.ceil(loc_y / CELL_SIZE)
-    cell_id = (row - 1) * CELL_COLUMN + column
-    return cell_id.astype(int)
-
-
-def init_cells():
+def init_cells(self):
     """
     initialize cell list, every cell in the lists consists of 5 params:
-    (1)loc_x(left) (2)loc_y(top) (3)NO. (4)PRB number (5)load
-    :return: cell_list: (1)loc_x(left) (2)loc_y(top) (3)NO. (4)PRB number (5)load
-    """
+    (1)loc_x(left) (2)loc_y(top) (3)cell_id
+    :return: cell_list: (1)loc_x(left) (2)loc_y(top) (3)cell_id    """
     # cell location
-    cell_id = np.arange(Num_CELL)
+    self.cell_id = np.arange(Num_CELL)
 
-    cell_x = [100, 100, ]
-    cell_y = []
-    for id in cell_id:
+    # the locations of cells are fixed and the coordinates are given
+    cell_x = [200, 200, 370, 370, 200, 30, 30]
+    cell_y = [200, 0, 100, 300, 400, 300, 100]
 
-
-
-    cells = np.vstack((cell_x, cell_y, cell_id, cell_PRB, cell_load))
+    cells = np.vstack((cell_x, cell_y, self.cell_id))
     return cells.T.astype(int)
 
 
-def move_user(users):
+def _get_rate_percell(self, users, cells):
     """
-    user mobility func update users' location in every frame. mobility range comes from user mobility type. Meanwhile,
-    user should only move in the cell range, restricted by the MARGIN.
+    get the rates of the user in all the cells if this user connects to the cell. return the array "rate" to represent the rate in the cells
     """
-    mobility = users[:, 3]
+    channels_square = np.random.rayleigh(1,(1,Num_CELL))**2 # the fast fading from the user to all the cells
+    norm_distance = [np.sqrt((cells[num][0] - users[0])**2 + (cells[num][1] - users[1])**2)*resolution/20.0 for num in self.cell_id] # calculate the distance between user and each base station
+    snr = channels_square * (norm_distance ** -4) # assume that "p * 10^-12/noise_power = 1" is feasible
+    rates = np.log(1+snr)
 
-    move_x = [random.randint(-x, x) for x in mobility]
-    user_x = users[:, 0] + move_x  # update loc according to user mobility type
-    users[:, 0] = np.clip(user_x, 4, WINDOW_WIDTH- 4)  # restrict user loc in the cell range
+    return rates
 
-    move_y = [random.randint(-x, x) for x in mobility]
-    user_y = users[:, 1] + move_y  # update loc according to user mobility type
-    users[:, 1] = np.clip(user_y, 4, WINDOW_HEIGHT - 4)  # restrict user loc in the cell range
 
-    cell_id = which_cell(users[:, 0], users[:, 1])
-    users[:, 2] = cell_id
+def move_user(self,users,action):
+    """
+    low mobility users are considered, i.e. the user only move one pixel every frame. different mobility trajectories will be tested to present the robustness of the neural network
+    """
+    mobility_speed = 1
+    move_x = random.randint(-mobility_speed, mobility_speed)
+    user_x_tmp = users[:, 0] + move_x
+    move_y = random.randint(-mobility_speed, mobility_speed)
+    user_y_tmp = users[:, 1] + move_y
+
+    if user_x_tmp > innerlayer_userange_x_low and user_y_tmp < innerlayer_userange_x_high and user_y_tmp > innerlayer_userange_y_low and user_y_tmp < innerlayer_userange_y_high:
+        self.user_x = users[:,0] - move_x
+        self.user_y = users[:,1] - move_y
+    else:
+        self.user_x = user_x_tmp
+        self.user_y = user_y_tmp
+    users[:, 2] = action
     return users
 
 
-def update_load(users, cells):
-    """
-    calculate cell load according to the sum of users in its range.
-    """
-    # count users in each cell
-    user_in = users[:, 2] - 1
-    user_count = Counter(user_in).most_common()
-    # update the load of each cell in cell list
-    for item in user_count:
-        cells[item[0]][4] = item[1]
-    return cells
-
-
 def get_reward(cells):
-    resource = cells[:, 3]
-    load = cells[:, 4]
-    # normal = (resource > load).astype(int)
-    # reward = np.sum(normal - 1)
-    gap = np.clip(resource - load, a_min=-10000, a_max=0)
-    absmax = np.max(abs(gap)) + exp(1e-5)
-    gap = np.divide(gap, absmax)
-    reward = np.sum(gap)
+
+
     return reward
 
 
