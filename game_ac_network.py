@@ -143,9 +143,9 @@ class GameACLSTMNetwork(GameACNetwork):
       self.W_lstm = tf.get_variable("BasicLSTMCell/Linear/Matrix")
       self.b_lstm = tf.get_variable("BasicLSTMCell/Linear/Bias")
 
-      self.reset_state()
+      self._reset_state()
       
-  def reset_state(self):
+  def _reset_state(self):
     self.lstm_state_out = tf.nn.rnn_cell.LSTMStateTuple(np.zeros([1, 64]),
                                                         np.zeros([1, 64]))
 

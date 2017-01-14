@@ -9,7 +9,7 @@ import math
 import os
 import time
 
-from game_ac_network import GameACFFNetwork, GameACLSTMNetwork
+from game_ac_network import GameACLSTMNetwork
 from a3c_training_thread import A3CTrainingThread
 from rmsprop_applier import RMSPropApplier
 

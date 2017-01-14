@@ -3,6 +3,7 @@ import sys
 import random
 import numpy as np
 from pygame.locals import *
+from constants import LOCAL_T_MAX
 from collections import Counter
 from math import exp
 
@@ -44,151 +45,124 @@ PURPLE = (255, 0, 255)
 CYAN = (0, 255, 255)
 background_color = WHITE
 
+
+# generate cell list, every cell in the lists consists of 5 params:
+# (1)loc_x(left) (2)loc_y(top) (3)cell_id
+# :return: cell_list: (1)loc_x(left) (2)loc_y(top) (3)cell_id
+
+# cell location
+cell_id = np.arange(Num_CELL)
+
+# the locations of cells are fixed and the coordinates are given
+cell_x = [200, 200, 370, 370, 200, 30, 30]
+cell_y = [200, 0, 100, 300, 400, 300, 100]
+
+cells = np.vstack((cell_x, cell_y))
+
+
 pygame.init()
 FPSCLOCK = pygame.time.Clock()
 DISPLAY_SURF = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 pygame.display.set_caption('MRO System Model')
 
+
+
 # "action" is the "cell_id" selected by the agent
 class SystemModel:
-    def __init__(self, action):
-        self.users = init_users(action)
-        self.cells = init_cells(self)
+  def __init__(self):
+      self.users, self.serve_cell_id = init_users()
+      self.handover_indicator = np.zeros(LOCAL_T_MAX)
 
-    def frame_step(self, input_action):
-        pygame.event.pump()
-        # update PRB according to actions
-        # for i in range(NUM_CELL):
-        #     # take the PRB from cell j to i
-        #     cell_to_take = input_action[i]
-        #     self.cells[i][3] += 1
-        #     self.cells[cell_to_take][3] -= 1
-        if input_action[1] == 1:
-            if self.cells[0][3] < 20:
-                self.cells[0][3] += 1
-            if self.cells[1][3] > 1:
-                self.cells[1][3] -= 1
-        elif input_action[2] == 1:
-            if self.cells[1][3] < 20:
-                self.cells[1][3] += 1
-            if self.cells[0][3] > 1:
-                self.cells[0][3] -= 1
-        print(self.cells[:, 3])
-        # get reward
-        reward = get_reward(self.cells)
+  def frame_step(self, users, action):
 
-        # update system states
-        self.users = move_user(self.users)
+      reward = self._get_reward(users, action)
+      rates = get_rate_percell(users, cells)
+      max_num = np.argmax(rates)
+      feature_user_rates_vector = np.zeros(1, Num_CELL)
+      feature_user_rates_vector[max_num] = 1
+      feature_handover = np.zeros(1,2)
+      if self.reward_handover ==0 or self.reward_handover ==1:
+          feature_handover[0] = 1
+      else:
+          feature_handover[1] = 1
+      s_t = np.hstack((feature_user_rates_vector,feature_handover))
+      return reward, s_t
+  def _move_user(self, users):
+      """
+      low mobility users are considered, i.e. the user only move one pixel every frame. different mobility trajectories will be tested to present the robustness of the neural network
+      """
+      mobility_speed = 1
+      move_x = random.randint(-mobility_speed, mobility_speed)
+      user_x_tmp = users[:, 0] + move_x
+      move_y = random.randint(-mobility_speed, mobility_speed)
+      user_y_tmp = users[:, 1] + move_y
 
-        # draw frame
-        DISPLAY_SURF.fill(background_color)
-        outrage_ratio = [x[4] / x[3] for x in self.cells]
-        outrage_ratio = [min(x, 1) for x in outrage_ratio]  # larger than 1 is outrage, use black color directly
-        color_index = [int(x * len(COLOR_LIST)) for x in outrage_ratio]
-        for cell in self.cells:
-            this_color_index = color_index[cell[2]]
-            try:
-                this_cell_color = [i * 255 for i in list(COLOR_LIST[this_color_index - 1].rgb)]
-            except:
-                print("this_color_index: ", this_color_index)
-                print("COLOR_LIST length: ", len(COLOR_LIST))
-            pygame.draw.rect(DISPLAY_SURF, this_cell_color, (cell[0], cell[1], CELL_SIZE, CELL_SIZE))
+      if user_x_tmp > innerlayer_userange_x_low and user_y_tmp < innerlayer_userange_x_high and user_y_tmp > innerlayer_userange_y_low and user_y_tmp < innerlayer_userange_y_high:
+          self.user_x = users[:, 0] - move_x
+          self.user_y = users[:, 1] - move_y
+      else:
+          self.user_x = user_x_tmp
+          self.user_y = user_y_tmp
 
-        # draw users
-        for user in self.users:
-            pygame.draw.circle(DISPLAY_SURF, RED, (user[0], user[1]), 2)
+      return users
 
-        image_data = pygame.surfarray.array3d(pygame.display.get_surface())
-        pygame.display.update()
-        FPSCLOCK.tick(FPS)
-        return image_data, reward
+  def _get_reward(self, users, action):
+      """
+      :param users: the location of user before moving
+      :param action: the taken action to obtain "users"
+      :return: reward : the weighted sum of rate and reward for handover, i.e. "handover error occurs" -- 0, "handover successes" -- 1
+      """
+      reward_weight_rate = 0.5
+      self.users_move = self._move_user(users)
+      self.rates_move = get_rate_percell(self.users_move, cells)
+      rate = self.rates_move[action]
+
+      self.count_handover = 0
+
+      if action == self.serve_cell_id:
+          self.reward_handover = 0
+          self.count_handover += 1
+          self.handover_indicator[self.count_handover] = 0
+      elif self.handover_indicator[0] == 1:
+          self.reward_handover = -1
+          self.count_handover = 0
+          self.handover_indicator[self.count_handover] = 1
+      else:
+          self.reward_handover = 1
+      self.serve_cell_id = np.copy(action)
+
+      reward = reward_weight_rate * rate + (1-reward_weight_rate) * self.reward_handover
+      return reward
 
 
-def init_users(self, action):
+def init_users():
     """
     initialize user. every user consists of 4 params:
     (1) loc_x(center) (2) loc_y(center) (3) which cell user is in (4) user mobility type
     user mobility type is divided into 3 categories: low, medium and high. Low mobility users takes 70% of all,
     while medium and high takes 20% and 10%.
     :return: user: (1) loc_x(center) (2) loc_y(center) (3) which cell user is in (4) user mobility type
-     """
+    """
     while True:
         user_x_tmp = np.random.randint(outlayer_userrange_x_low, outlayer_userrange_x_high+1, size=NUM_USER, dtype='int')
         user_y_tmp = np.random.randint(outlayer_userrange_y_low, outlayer_userrange_y_high+1, size=NUM_USER, dtype='int')
         if user_x_tmp < innerlayer_userange_x_low or user_x_tmp > innerlayer_userange_x_high or user_y_tmp < innerlayer_userange_y_low or user_y_tmp > innerlayer_userange_y_high:
-           self.user_x = user_x_tmp
-           self.user_y = user_y_tmp
+           user_x = user_x_tmp
+           user_y = user_y_tmp
            break
-    servingcell_id = action
-    users = np.vstack((self.user_x, self.user_y, servingcell_id))
-    return users.T
+    users = np.vstack((user_x, user_y))
+    rates = get_rate_percell(users, cells)
+    serve_cell_id= np.argmax(rates)
+    return users.T, serve_cell_id
 
-
-def init_cells(self):
-    """
-    initialize cell list, every cell in the lists consists of 5 params:
-    (1)loc_x(left) (2)loc_y(top) (3)cell_id
-    :return: cell_list: (1)loc_x(left) (2)loc_y(top) (3)cell_id    """
-    # cell location
-    self.cell_id = np.arange(Num_CELL)
-
-    # the locations of cells are fixed and the coordinates are given
-    cell_x = [200, 200, 370, 370, 200, 30, 30]
-    cell_y = [200, 0, 100, 300, 400, 300, 100]
-
-    cells = np.vstack((cell_x, cell_y, self.cell_id))
-    return cells.T.astype(int)
-
-
-def _get_rate_percell(self, users, cells):
-    """
-    get the rates of the user in all the cells if this user connects to the cell. return the array "rate" to represent the rate in the cells
-    """
-    channels_square = np.random.rayleigh(1,(1,Num_CELL))**2 # the fast fading from the user to all the cells
-    norm_distance = [np.sqrt((cells[num][0] - users[0])**2 + (cells[num][1] - users[1])**2)*resolution/20.0 for num in self.cell_id] # calculate the distance between user and each base station
-    snr = channels_square * (norm_distance ** -4) # assume that "p * 10^-12/noise_power = 1" is feasible
-    rates = np.log(1+snr)
-
-    return rates
-
-
-def move_user(self,users,action):
-    """
-    low mobility users are considered, i.e. the user only move one pixel every frame. different mobility trajectories will be tested to present the robustness of the neural network
-    """
-    mobility_speed = 1
-    move_x = random.randint(-mobility_speed, mobility_speed)
-    user_x_tmp = users[:, 0] + move_x
-    move_y = random.randint(-mobility_speed, mobility_speed)
-    user_y_tmp = users[:, 1] + move_y
-
-    if user_x_tmp > innerlayer_userange_x_low and user_y_tmp < innerlayer_userange_x_high and user_y_tmp > innerlayer_userange_y_low and user_y_tmp < innerlayer_userange_y_high:
-        self.user_x = users[:,0] - move_x
-        self.user_y = users[:,1] - move_y
-    else:
-        self.user_x = user_x_tmp
-        self.user_y = user_y_tmp
-    users[:, 2] = action
-    return users
-
-
-def get_reward(cells):
-
-
-    return reward
-
-
-def main():
-    system_model = SystemModel()
-    while True:
-        items = range(NUM_CELL)
-        random_action = random.sample(items, len(items))
-        imagedata, reward = system_model.frame_step(random_action)
-        for event in pygame.event.get():
-            if event.type == QUIT or (event.type == KEYUP and event.key == K_ESCAPE):
-                pygame.quit()
-                sys.exit()
-
-
-if __name__ == '__main__':
-    main()
+def get_rate_percell(users, cells):
+      """
+      get the rates of the user in all the cells if this user connects to the cell. return the array "rate" to represent the rate in the cells
+      """
+      channels_square = np.random.rayleigh(1, (1, Num_CELL)) ** 2  # the fast fading from the user to all the cells
+      norm_distance = np.array(
+          np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 20.0 for num in
+          cell_id)  # calculate the distance between user and each base station
+      snr = channels_square * (norm_distance ** -4)  # assume that "p * 10^-12/noise_power = 1" is feasible
+      rates = np.log(1 + snr)
+      return rates
