@@ -70,13 +70,20 @@ pygame.display.set_caption('MRO System Model')
 # "action" is the "cell_id" selected by the agent
 class SystemModel:
   def __init__(self):
-      self.users, self.serve_cell_id = init_users()
+      self.users, self.serve_cell_id, self.inital_action= init_users()
       self.handover_indicator = np.zeros(LOCAL_T_MAX)
 
-  def frame_step(self, users, action):
-
-      reward = self._get_reward(users, action)
-      rates = get_rate_percell(users, cells)
+  def frame_step(self, action):
+      """
+      the func can generate the reward and state, also update the users locations
+      :param: users:the locations of the users
+              action: the "cell_id" selected by users
+      :return: users: the moved location of users
+               reward: the state-action reward
+               s_t: the extracted features of the system
+      """
+      reward = self._get_reward(action)
+      rates = get_rate_percell(self.users, cells)
       max_num = np.argmax(rates)
       feature_user_rates_vector = np.zeros(1, Num_CELL)
       feature_user_rates_vector[max_num] = 1
@@ -86,40 +93,40 @@ class SystemModel:
       else:
           feature_handover[1] = 1
       s_t = np.hstack((feature_user_rates_vector,feature_handover))
+      self.users = self._move_user()
+
       return reward, s_t
-  def _move_user(self, users):
+  def _move_user(self):
       """
       low mobility users are considered, i.e. the user only move one pixel every frame. different mobility trajectories will be tested to present the robustness of the neural network
       """
       mobility_speed = 1
       move_x = random.randint(-mobility_speed, mobility_speed)
-      user_x_tmp = users[:, 0] + move_x
+      user_x_tmp = self.users[0] + move_x
       move_y = random.randint(-mobility_speed, mobility_speed)
-      user_y_tmp = users[:, 1] + move_y
+      user_y_tmp = self.users[1] + move_y
 
       if user_x_tmp > innerlayer_userange_x_low and user_y_tmp < innerlayer_userange_x_high and user_y_tmp > innerlayer_userange_y_low and user_y_tmp < innerlayer_userange_y_high:
-          self.user_x = users[:, 0] - move_x
-          self.user_y = users[:, 1] - move_y
+          user_x = self.users[0] - move_x
+          user_y = self.users[1] - move_y
       else:
-          self.user_x = user_x_tmp
-          self.user_y = user_y_tmp
+          user_x = user_x_tmp
+          user_y = user_y_tmp
+      self.users = np.hstack((user_x, user_y))
 
-      return users
-
-  def _get_reward(self, users, action):
+  def _get_reward(self, last_action):
       """
       :param users: the location of user before moving
       :param action: the taken action to obtain "users"
       :return: reward : the weighted sum of rate and reward for handover, i.e. "handover error occurs" -- 0, "handover successes" -- 1
       """
       reward_weight_rate = 0.5
-      self.users_move = self._move_user(users)
-      self.rates_move = get_rate_percell(self.users_move, cells)
-      rate = self.rates_move[action]
+      self.rates = get_rate_percell(self.users, cells)
+      rate = self.rates[last_action]
 
       self.count_handover = 0
 
-      if action == self.serve_cell_id:
+      if last_action == self.serve_cell_id:
           self.reward_handover = 0
           self.count_handover += 1
           self.handover_indicator[self.count_handover] = 0
@@ -129,7 +136,7 @@ class SystemModel:
           self.handover_indicator[self.count_handover] = 1
       else:
           self.reward_handover = 1
-      self.serve_cell_id = np.copy(action)
+      self.serve_cell_id = np.copy(last_action)
 
       reward = reward_weight_rate * rate + (1-reward_weight_rate) * self.reward_handover
       return reward
@@ -150,10 +157,11 @@ def init_users():
            user_x = user_x_tmp
            user_y = user_y_tmp
            break
-    users = np.vstack((user_x, user_y))
+    users = np.hstack((user_x, user_y))
     rates = get_rate_percell(users, cells)
     serve_cell_id= np.argmax(rates)
-    return users.T, serve_cell_id
+    action = np.random.randint(Num_CELL)
+    return users, serve_cell_id, action
 
 def get_rate_percell(users, cells):
       """
@@ -164,5 +172,5 @@ def get_rate_percell(users, cells):
           np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 20.0 for num in
           cell_id)  # calculate the distance between user and each base station
       snr = channels_square * (norm_distance ** -4)  # assume that "p * 10^-12/noise_power = 1" is feasible
-      rates = np.log(1 + snr)
+      rates = np.log2(1 + snr)
       return rates
