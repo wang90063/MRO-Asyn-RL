@@ -5,7 +5,7 @@ import random
 import time
 import sys
 
-from game_state import GameState
+from system_model import SystemModel
 from game_ac_network import GameACLSTMNetwork
 
 from constants import GAMMA
@@ -47,7 +47,7 @@ class A3CTrainingThread(object):
       
     self.sync = self.local_network.sync_from(global_network)
     
-    self.game_state = GameState(113 * thread_index)
+    self.model = SystemModel()
     
     self.local_t = 0
 
@@ -91,13 +91,15 @@ class A3CTrainingThread(object):
     start_local_t = self.local_t
 
     start_lstm_state = self.local_network.lstm_state_out
-    
+
+    # get the initial state from the initial action
+    _, s_t = self.model.frame_step(self.model.inital_action)
     # t_max times loop
     for i in range(LOCAL_T_MAX):
-      pi_, value_ = self.local_network.run_policy_and_value(sess, self.game_state.s_t)
+      pi_, value_ = self.local_network.run_policy_and_value(sess, s_t)
       action = self.choose_action(pi_)
 
-      states.append(self.game_state.s_t)
+      states.append(s_t)
       actions.append(action)
       values.append(value_)
 

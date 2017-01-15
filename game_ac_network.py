@@ -88,31 +88,31 @@ class GameACLSTMNetwork(GameACNetwork):
     scope_name = "net_" + str(self._thread_index)
     with tf.device(self._device), tf.variable_scope(scope_name) as scope:
 
-      self.W_fc1, self.b_fc1 = self._fc_variable([96, 64]) # Feed the data of an agent into FC layer
+      self.W_fc1, self.b_fc1 = self._fc_variable([9, 8]) # Feed the data of an agent into FC layer
 
       # lstm
-      self.lstm = tf.nn.rnn_cell.BasicLSTMCell(64, state_is_tuple=True)
+      self.lstm = tf.nn.rnn_cell.BasicLSTMCell(8, state_is_tuple=True)
 
       # weight for policy output layer
-      self.W_fc2, self.b_fc2 = self._fc_variable([64, action_size])
+      self.W_fc2, self.b_fc2 = self._fc_variable([8, action_size])
 
       # weight for value output layer
-      self.W_fc3, self.b_fc3 = self._fc_variable([64, 1])
+      self.W_fc3, self.b_fc3 = self._fc_variable([8, 1])
 
       # state (input)
-      self.s = tf.placeholder("float", [None, 1, 96])
+      self.s = tf.placeholder("float", [None, 1, 9])
 
       h_fc1 = tf.nn.relu(tf.matmul(self.s, self.W_fc1) + self.b_fc1)
       # h_fc1 shape=(5,256)
 
-      h_fc1_reshaped = tf.reshape(h_fc1, [1,-1,64]) #
+      h_fc1_reshaped = tf.reshape(h_fc1, [1,-1,8]) #
       # h_fc_reshaped = (1,5,256)
 
       # place holder for LSTM unrolling time step size.
       self.step_size = tf.placeholder(tf.float32, [1])
 
-      self.initial_lstm_state0 = tf.placeholder(tf.float32, [1, 64])
-      self.initial_lstm_state1 = tf.placeholder(tf.float32, [1, 64])
+      self.initial_lstm_state0 = tf.placeholder(tf.float32, [1, 8])
+      self.initial_lstm_state1 = tf.placeholder(tf.float32, [1, 8])
       self.initial_lstm_state = tf.nn.rnn_cell.LSTMStateTuple(self.initial_lstm_state0,
                                                               self.initial_lstm_state1)
       
@@ -130,7 +130,7 @@ class GameACLSTMNetwork(GameACNetwork):
 
       # lstm_outputs: (1,5,64) for back prop, (1,1,64) for forward prop.
       
-      lstm_outputs = tf.reshape(lstm_outputs, [-1,64])
+      lstm_outputs = tf.reshape(lstm_outputs, [-1,8])
 
       # policy (output)
       self.pi = tf.nn.softmax(tf.matmul(lstm_outputs, self.W_fc2) + self.b_fc2)
@@ -146,8 +146,8 @@ class GameACLSTMNetwork(GameACNetwork):
       self._reset_state()
       
   def _reset_state(self):
-    self.lstm_state_out = tf.nn.rnn_cell.LSTMStateTuple(np.zeros([1, 64]),
-                                                        np.zeros([1, 64]))
+    self.lstm_state_out = tf.nn.rnn_cell.LSTMStateTuple(np.zeros([1, 8]),
+                                                        np.zeros([1, 8]))
 
   def run_policy_and_value(self, sess, s_t):
     # This run_policy_and_value() is used when forward propagating.
