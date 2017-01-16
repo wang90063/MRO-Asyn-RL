@@ -24,7 +24,7 @@ class A3CTrainingThread(object):
                grad_applier,
                max_global_time_step,
                device):
-
+    print ("This is the thread", thread_index)
     self.thread_index = thread_index
     self.learning_rate_input = learning_rate_input
     self.max_global_time_step = max_global_time_step
@@ -83,7 +83,7 @@ class A3CTrainingThread(object):
     rewards = []
     values = []
 
-    terminal_end = False
+    # terminal_end = False
 
     # copy weights from shared to local
     sess.run( self.sync )
@@ -93,53 +93,38 @@ class A3CTrainingThread(object):
     start_lstm_state = self.local_network.lstm_state_out
 
     # get the initial state from the initial action
-    _, s_t = self.model.frame_step(self.model.inital_action)
+    self.model.intialize_state()
     # t_max times loop
     for i in range(LOCAL_T_MAX):
-      pi_, value_ = self.local_network.run_policy_and_value(sess, s_t)
+      pi_, value_ = self.local_network.run_policy_and_value(sess, self.model.s_t)
       action = self.choose_action(pi_)
 
-      states.append(s_t)
+      states.append(self.model.s_t)
       actions.append(action)
       values.append(value_)
 
-      if (self.thread_index == 0) and (self.local_t % LOG_INTERVAL == 0):
+      if  (self.local_t % LOG_INTERVAL == 0):#(self.thread_index == 0) and
         print("pi={}".format(pi_))
         print(" V={}".format(value_))
-
+        print("thread", self.thread_index)
       # process game
-      self.game_state.process(action)
+      self.model.state_update(actions[i-1],actions[i])
 
       # receive game result
-      reward = self.game_state.reward
-      terminal = self.game_state.terminal
+      reward = self.model.reward
 
       self.episode_reward += reward
 
       # clip reward
-      rewards.append( np.clip(reward, -1, 1) )
+      rewards.append(reward)
 
       self.local_t += 1
 
       # s_t1 -> s_t
-      self.game_state.update()
-      
-      if terminal:
-        terminal_end = True
-        print("score={}".format(self.episode_reward))
-
-        self._record_score(sess, summary_writer, summary_op, score_input,
-                           self.episode_reward, global_t)
-          
-        self.episode_reward = 0
-        self.game_state.reset()
-
-        self.local_network.reset_state()
-        break
+      self.model.update()
 
     R = 0.0
-    if not terminal_end:
-      R = self.local_network.run_value(sess, self.game_state.s_t)
+    R = self.local_network.run_value(sess, self.model.s_t)
 
     actions.reverse()
     states.reverse()

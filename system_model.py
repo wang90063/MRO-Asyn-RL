@@ -57,8 +57,7 @@ cell_id = np.arange(Num_CELL)
 cell_x = [200, 200, 370, 370, 200, 30, 30]
 cell_y = [200, 0, 100, 300, 400, 300, 100]
 
-cells = np.vstack((cell_x, cell_y))
-
+cells = np.vstack((cell_x, cell_y,cell_id)).T
 
 pygame.init()
 FPSCLOCK = pygame.time.Clock()
@@ -70,32 +69,36 @@ pygame.display.set_caption('MRO System Model')
 # "action" is the "cell_id" selected by the agent
 class SystemModel:
   def __init__(self):
-      self.users, self.serve_cell_id, self.inital_action= init_users()
+      self.users, self.serve_cell_id, self.last_serve_cell_id= init_users()
       self.handover_indicator = np.zeros(LOCAL_T_MAX)
 
-  def frame_step(self, action):
+  def intialize_state(self):
+      a = np.zeros(Num_CELL)
+      b = np.zeros(2)
+      a[np.random.randint(Num_CELL)] = 1
+      b[np.random.randint(2)] = 1
+      self.s_t = np.hstack((a, b))
+
+  def state_update(self, last_action, action):
       """
       the func can generate the reward and state, also update the users locations
       :param: users:the locations of the users
               action: the "cell_id" selected by users
-      :return: users: the moved location of users
-               reward: the state-action reward
-               s_t: the extracted features of the system
+              last_action
       """
-      reward = self._get_reward(action)
-      rates = get_rate_percell(self.users, cells)
-      max_num = np.argmax(rates)
-      feature_user_rates_vector = np.zeros(1, Num_CELL)
-      feature_user_rates_vector[max_num] = 1
-      feature_handover = np.zeros(1,2)
-      if self.reward_handover ==0 or self.reward_handover ==1:
-          feature_handover[0] = 1
-      else:
-          feature_handover[1] = 1
-      s_t = np.hstack((feature_user_rates_vector,feature_handover))
-      self.users = self._move_user()
+      r = self._get_reward(action)
+      s_t = self._get_state(last_action)
+      self._move_user()
+      last_action = action
+      s_t1 = self._get_state(last_action)
+      self.reward = r
+      self.s_t = s_t
+      self.s_t1 = s_t1
 
-      return reward, s_t
+  def update(self):
+      self.s_t = self.s_t1
+
+
   def _move_user(self):
       """
       low mobility users are considered, i.e. the user only move one pixel every frame. different mobility trajectories will be tested to present the robustness of the neural network
@@ -114,7 +117,7 @@ class SystemModel:
           user_y = user_y_tmp
       self.users = np.hstack((user_x, user_y))
 
-  def _get_reward(self, last_action):
+  def _get_reward(self, action):
       """
       :param users: the location of user before moving
       :param action: the taken action to obtain "users"
@@ -122,11 +125,11 @@ class SystemModel:
       """
       reward_weight_rate = 0.5
       self.rates = get_rate_percell(self.users, cells)
-      rate = self.rates[last_action]
+      rate = self.rates[0][action]
 
       self.count_handover = 0
 
-      if last_action == self.serve_cell_id:
+      if action == self.serve_cell_id:
           self.reward_handover = 0
           self.count_handover += 1
           self.handover_indicator[self.count_handover] = 0
@@ -136,11 +139,25 @@ class SystemModel:
           self.handover_indicator[self.count_handover] = 1
       else:
           self.reward_handover = 1
-      self.serve_cell_id = np.copy(last_action)
+      self.last_serve_cell_id = self.serve_cell_id
+      self.serve_cell_id = action
 
       reward = reward_weight_rate * rate + (1-reward_weight_rate) * self.reward_handover
       return reward
 
+  def _get_state(self, last_action):
+      rates = get_rate_percell(self.users, cells)
+      max_num = np.argmax(rates)
+      feature_user_rates_vector = np.zeros(Num_CELL)
+      feature_user_rates_vector[max_num] = 1
+      feature_handover = np.zeros(2)
+      if last_action == self.last_serve_cell_id:
+          feature_handover[0] = 1
+      else:
+          feature_handover[1] = 1
+      s_t = np.hstack((feature_user_rates_vector,feature_handover))
+
+      return s_t
 
 def init_users():
     """
@@ -160,17 +177,21 @@ def init_users():
     users = np.hstack((user_x, user_y))
     rates = get_rate_percell(users, cells)
     serve_cell_id= np.argmax(rates)
-    action = np.random.randint(Num_CELL)
-    return users, serve_cell_id, action
+    last_serve_cell_id = np.random.randint(Num_CELL)
+    return users, serve_cell_id, last_serve_cell_id
 
 def get_rate_percell(users, cells):
       """
       get the rates of the user in all the cells if this user connects to the cell. return the array "rate" to represent the rate in the cells
       """
       channels_square = np.random.rayleigh(1, (1, Num_CELL)) ** 2  # the fast fading from the user to all the cells
-      norm_distance = np.array(
-          np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 20.0 for num in
-          cell_id)  # calculate the distance between user and each base station
+      norm_distance = np.zeros(Num_CELL)
+      for num in cell_id:
+          # print(num)
+          # print (cells[num][0] - users[0]) ** 2
+          # print (cells[num][1] - users[1]) ** 2
+          # print np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 20.0
+          norm_distance[num] = np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 20.0 # calculate the distance between user and each base station
       snr = channels_square * (norm_distance ** -4)  # assume that "p * 10^-12/noise_power = 1" is feasible
       rates = np.log2(1 + snr)
       return rates

@@ -100,7 +100,7 @@ class GameACLSTMNetwork(GameACNetwork):
       self.W_fc3, self.b_fc3 = self._fc_variable([8, 1])
 
       # state (input)
-      self.s = tf.placeholder("float", [None, 1, 9])
+      self.s = tf.placeholder("float", [None, 9])
 
       h_fc1 = tf.nn.relu(tf.matmul(self.s, self.W_fc1) + self.b_fc1)
       # h_fc1 shape=(5,256)
