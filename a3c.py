@@ -94,10 +94,9 @@ if checkpoint and checkpoint.model_checkpoint_path:
     wall_t = float(f.read())
 else:
   print("Could not find old checkpoint")
-  # set wall time
+  # set wall timelog
+
   wall_t = 0.0
-
-
 def train_function(parallel_index):
   global global_t
   

@@ -22,7 +22,7 @@ class GameACNetwork(object):
       self.td = tf.placeholder("float", [None])
 
       # avoid NaN with clipping when value in pi becomes zero
-      log_pi = tf.log(tf.clip_by_value(self.pi, 1e-20, 1.0))
+      log_pi = tf.log(tf.clip_by_value(self.pi, 1e-4, 1.0))
       
       # policy entropy
       entropy = -tf.reduce_sum(self.pi * log_pi, reduction_indices=1)
@@ -88,7 +88,7 @@ class GameACLSTMNetwork(GameACNetwork):
     scope_name = "net_" + str(self._thread_index)
     with tf.device(self._device), tf.variable_scope(scope_name) as scope:
 
-      self.W_fc1, self.b_fc1 = self._fc_variable([9, 8]) # Feed the data of an agent into FC layer
+      self.W_fc1, self.b_fc1 = self._fc_variable([8, 8]) # Feed the data of an agent into FC layer
 
       # lstm
       self.lstm = tf.nn.rnn_cell.BasicLSTMCell(8, state_is_tuple=True)
@@ -100,7 +100,7 @@ class GameACLSTMNetwork(GameACNetwork):
       self.W_fc3, self.b_fc3 = self._fc_variable([8, 1])
 
       # state (input)
-      self.s = tf.placeholder("float", [None, 9])
+      self.s = tf.placeholder("float", [None, 8])
 
       h_fc1 = tf.nn.relu(tf.matmul(self.s, self.W_fc1) + self.b_fc1)
       # h_fc1 shape=(5,256)
@@ -116,7 +116,7 @@ class GameACLSTMNetwork(GameACNetwork):
       self.initial_lstm_state = tf.nn.rnn_cell.LSTMStateTuple(self.initial_lstm_state0,
                                                               self.initial_lstm_state1)
       
-      # Unrolling LSTM up to LOCAL_T_MAX time steps. (= 5time steps.)
+      # Unrolling LSTM up to LOCAL_T_MAX time steps. (= 5 time steps.)
       # When episode terminates unrolling time steps becomes less than LOCAL_TIME_STEP.
       # Unrolling step size is applied via self.step_size placeholder.
       # When forward propagating, step_size is 1.

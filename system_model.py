@@ -16,19 +16,15 @@ WINDOW_HEIGHT = 400  # size of windows' height in pixels
 cell_radius = 25 # "m" this is the radius of cell
 resolution  = cell_radius * 4./WINDOW_WIDTH # meter/pixel, the longest distace in the simulation system is "cell_radius * 4"
 
-outlayer_userrange_x_low = 24.5 / resolution
-outlayer_userrange_x_high = 75.5 / resolution
+outlayer_userrange_x_low = -25.5 / resolution
+outlayer_userrange_x_high = 25.5 / resolution
 
-outlayer_userrange_y_low = 20 / resolution
-outlayer_userrange_y_high = 80 / resolution
+outlayer_userrange_y_low = -30 / resolution
+outlayer_userrange_y_high = 30 / resolution
 
-innerlayer_userange_x_low = 33 / resolution
-innerlayer_userange_x_high = 67 / resolution
-
-innerlayer_userange_y_low = 30 / resolution
-innerlayer_userange_y_high = 70 / resolution
-
-Num_CELL = 7
+outer_radius = 30 / resolution
+inner_radius = 20 / resolution
+Num_CELL = 6#7
 NUM_USER = 1 # In asynchronous deep Q learning, only one user in one thread
 
 # RGB
@@ -54,16 +50,13 @@ background_color = WHITE
 cell_id = np.arange(Num_CELL)
 
 # the locations of cells are fixed and the coordinates are given
-cell_x = [200, 200, 370, 370, 200, 30, 30]
-cell_y = [200, 0, 100, 300, 400, 300, 100]
+# cell_x = [200, 200, 370, 370, 200, 30, 30]
+# cell_y = [200, 0, 100, 300, 400, 300, 100]
+
+cell_x = [0.0, 170.0, 170.0, 0.0, -170, -170]
+cell_y = [200.0, 100.0, -100.0, -200.0, -100, 100]
 
 cells = np.vstack((cell_x, cell_y,cell_id)).T
-
-pygame.init()
-FPSCLOCK = pygame.time.Clock()
-DISPLAY_SURF = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-pygame.display.set_caption('MRO System Model')
-
 
 
 # "action" is the "cell_id" selected by the agent
@@ -109,7 +102,7 @@ class SystemModel:
       move_y = random.randint(-mobility_speed, mobility_speed)
       user_y_tmp = self.users[1] + move_y
 
-      if user_x_tmp > innerlayer_userange_x_low and user_y_tmp < innerlayer_userange_x_high and user_y_tmp > innerlayer_userange_y_low and user_y_tmp < innerlayer_userange_y_high:
+      if np.abs(user_x_tmp) > np.sqrt(3)/2.0 * outer_radius and np.abs(user_x_tmp)+np.abs(user_y_tmp)/np.sqrt(3) > outer_radius :#and np.abs(user_x_tmp) < np.sqrt(3)/2.0*inner_radius and  np.abs(user_x_tmp)+np.abs(user_y_tmp)/np.sqrt(3) < inner_radius:
           user_x = self.users[0] - move_x
           user_y = self.users[1] - move_y
       else:
@@ -170,7 +163,7 @@ def init_users():
     while True:
         user_x_tmp = np.random.randint(outlayer_userrange_x_low, outlayer_userrange_x_high+1, size=NUM_USER, dtype='int')
         user_y_tmp = np.random.randint(outlayer_userrange_y_low, outlayer_userrange_y_high+1, size=NUM_USER, dtype='int')
-        if user_x_tmp < innerlayer_userange_x_low or user_x_tmp > innerlayer_userange_x_high or user_y_tmp < innerlayer_userange_y_low or user_y_tmp > innerlayer_userange_y_high:
+        if np.abs(user_x_tmp) < np.sqrt(3)/2.0 * outer_radius and np.abs(user_x_tmp)+np.abs(user_y_tmp)/np.sqrt(3) < outer_radius and np.abs(user_x_tmp) > np.sqrt(3)/2.0*inner_radius :#and  np.abs(user_x_tmp)+np.abs(user_y_tmp)/np.sqrt(3) > inner_radius:
            user_x = user_x_tmp
            user_y = user_y_tmp
            break
@@ -192,6 +185,6 @@ def get_rate_percell(users, cells):
           # print (cells[num][1] - users[1]) ** 2
           # print np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 20.0
           norm_distance[num] = np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 20.0 # calculate the distance between user and each base station
-      snr = channels_square * (norm_distance ** -4)  # assume that "p * 10^-12/noise_power = 1" is feasible
+      snr = channels_square * ((norm_distance+0.1) ** -4)  # assume that "p * 10^-12/noise_power = 1" is feasible
       rates = np.log2(1 + snr)
       return rates

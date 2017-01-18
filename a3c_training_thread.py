@@ -123,6 +123,11 @@ class A3CTrainingThread(object):
       # s_t1 -> s_t
       self.model.update()
 
+      # print("score={}".format(self.episode_reward))
+
+      self._record_score(sess, summary_writer, summary_op, score_input,
+                         self.episode_reward, global_t)
+
     R = 0.0
     R = self.local_network.run_value(sess, self.model.s_t)
 
