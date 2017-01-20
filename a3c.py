@@ -114,8 +114,8 @@ def train_function(parallel_index):
     diff_global_t = training_thread.process(sess, global_t, summary_writer,
                                             summary_op, score_input)
     global_t += diff_global_t
-    
-    
+
+
 def signal_handler(signal, frame):
   global stop_requested
   print('You pressed Ctrl+C!')
@@ -141,6 +141,8 @@ print('Now saving data. Please wait')
 for t in train_threads:
   t.join()
 
+
+
 if not os.path.exists(CHECKPOINT_DIR):
   os.mkdir(CHECKPOINT_DIR)  
 
@@ -149,6 +151,8 @@ wall_t = time.time() - start_time
 wall_t_fname = CHECKPOINT_DIR + '/' + 'wall_t.' + str(global_t)
 with open(wall_t_fname, 'w') as f:
   f.write(str(wall_t))
+  f.close()
+
 
 saver.save(sess, CHECKPOINT_DIR + '/' + 'checkpoint', global_step = global_t)
 

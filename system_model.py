@@ -79,7 +79,7 @@ class SystemModel:
               action: the "cell_id" selected by users
               last_action
       """
-      r = self._get_reward(action)
+      r, rate = self._get_reward(action)
       s_t = self._get_state(last_action)
       self._move_user()
       last_action = action
@@ -87,6 +87,8 @@ class SystemModel:
       self.reward = r
       self.s_t = s_t
       self.s_t1 = s_t1
+      self.rate = rate
+
 
   def update(self):
       self.s_t = self.s_t1
@@ -116,27 +118,27 @@ class SystemModel:
       :param action: the taken action to obtain "users"
       :return: reward : the weighted sum of rate and reward for handover, i.e. "handover error occurs" -- 0, "handover successes" -- 1
       """
-      reward_weight_rate = 0.5
+      reward_weight_rate = 0.3
       self.rates = get_rate_percell(self.users, cells)
       rate = self.rates[0][action]
 
       self.count_handover = 0
 
       if action == self.serve_cell_id:
-          self.reward_handover = 0
+          self.reward_handover = 1
           self.count_handover += 1
           self.handover_indicator[self.count_handover] = 0
       elif self.handover_indicator[0] == 1:
-          self.reward_handover = -1
+          self.reward_handover = 0
           self.count_handover = 0
           self.handover_indicator[self.count_handover] = 1
-      else:
+        else:
           self.reward_handover = 1
       self.last_serve_cell_id = self.serve_cell_id
       self.serve_cell_id = action
 
       reward = reward_weight_rate * rate + (1-reward_weight_rate) * self.reward_handover
-      return reward
+      return reward, rate
 
   def _get_state(self, last_action):
       rates = get_rate_percell(self.users, cells)
@@ -177,14 +179,14 @@ def get_rate_percell(users, cells):
       """
       get the rates of the user in all the cells if this user connects to the cell. return the array "rate" to represent the rate in the cells
       """
-      channels_square = np.random.rayleigh(1, (1, Num_CELL)) ** 2  # the fast fading from the user to all the cells
+      channels_square = np.random.rayleigh(1, (1, Num_CELL))  # the fast fading from the user to all the cells
       norm_distance = np.zeros(Num_CELL)
       for num in cell_id:
           # print(num)
           # print (cells[num][0] - users[0]) ** 2
           # print (cells[num][1] - users[1]) ** 2
           # print np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 20.0
-          norm_distance[num] = np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 20.0 # calculate the distance between user and each base station
+          norm_distance[num] = np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 45.0 # calculate the distance between user and each base station
       snr = channels_square * ((norm_distance+0.1) ** -4)  # assume that "p * 10^-12/noise_power = 1" is feasible
       rates = np.log2(1 + snr)
       return rates
