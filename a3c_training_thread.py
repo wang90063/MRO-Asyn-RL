@@ -120,7 +120,7 @@ class A3CTrainingThread(object):
 
 
       if self.local_t % 100 == 0 and self.local_t != 0:
-         self.mean_reward = self.episode_reward
+         self.mean_reward = self.episode_reward/100
          self.episode_reward = 0
       self._record_score(sess, summary_writer, summary_op, score_input,
                          self.mean_reward, global_t)
