@@ -46,19 +46,13 @@ cells = np.vstack((cell_x, cell_y,cell_id)).T
 
 
 # "action" is the "cell_id" selected by the agent
-class SystemModel:
+class SystemModel3gpp:
   def __init__(self):
       self.users, self.serve_cell_id, self.last_serve_cell_id= init_users()
       self.handover_indicator = np.zeros(LOCAL_T_MAX)
+      self.rates = get_rate_percell(self.users, cells)
 
-  def intialize_state(self):
-      a = np.zeros(Num_CELL)
-      b = np.zeros(2)
-      a[np.random.randint(Num_CELL)] = 1
-      b[np.random.randint(2)] = 1
-      self.s_t = np.hstack((a, b))
-
-  def state_update(self, last_action, action):
+  def state_update(self, action):
       """
       the func can generate the reward and state, also update the users locations
       :param: users:the locations of the users
@@ -66,18 +60,9 @@ class SystemModel:
               last_action
       """
       r, rate = self._get_reward(action)
-      s_t = self._get_state(last_action)
       self._move_user()
-      last_action = action
-      s_t1 = self._get_state(last_action)
       self.reward = r
-      self.s_t = s_t
-      self.s_t1 = s_t1
       self.rate = rate
-
-
-  def update(self):
-      self.s_t = self.s_t1
 
 
   def _move_user(self):
@@ -104,9 +89,10 @@ class SystemModel:
       :param action: the taken action to obtain "users"
       :return: reward : the weighted sum of rate and reward for handover, i.e. "handover error occurs" -- 0, "handover successes" -- 1
       """
+      reward_weight_rate = 0.5
       self.rates = get_rate_percell(self.users, cells)
       rate = self.rates[0][action]
-      reward_weight_rate = 0.5
+
       self.count_handover = 0
 
       if action == self.serve_cell_id:
@@ -127,19 +113,6 @@ class SystemModel:
       reward = reward_weight_rate * rate + (1-reward_weight_rate) * self.reward_handover
       return reward, rate
 
-  def _get_state(self, last_action):
-      rates = get_rate_percell(self.users, cells)
-      max_num = np.argmax(rates)
-      feature_user_rates_vector = np.zeros(Num_CELL)
-      feature_user_rates_vector[max_num] = 1
-      feature_handover = np.zeros(2)
-      if last_action == self.last_serve_cell_id:
-          feature_handover[0] = 1
-      else:
-          feature_handover[1] = 1
-      s_t = np.hstack((feature_user_rates_vector,feature_handover))
-
-      return s_t
 
 def init_users():
     """

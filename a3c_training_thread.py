@@ -116,12 +116,14 @@ class A3CTrainingThread(object):
       # receive game result
       reward = self.model.reward
 
+      self.episode_reward += reward
 
-      if self.local_t % 100 == 0:
+
+      if self.local_t % 100 == 0 and self.local_t != 0:
          self.mean_reward = self.episode_reward
          self.episode_reward = 0
-
-      self.episode_reward += reward
+      self._record_score(sess, summary_writer, summary_op, score_input,
+                         self.mean_reward, global_t)
       if  (self.thread_index == 0):
               print("Thread",  self.thread_index, "reward", reward, "episode_reward", self.episode_reward, "global_t", global_t, "local_t", self.local_t, "rate", self.model.rate, "handover_reward", self.model.reward_handover)
 
@@ -142,8 +144,7 @@ class A3CTrainingThread(object):
     # for number in np.arange(1000):
     #   self.episode_reward[number]
 
-      self._record_score(sess, summary_writer, summary_op, score_input,
-                         self.mean_reward, global_t)
+
 
     R = 0.0
     R = self.local_network.run_value(sess, self.model.s_t)
