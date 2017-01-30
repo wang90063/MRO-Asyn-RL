@@ -22,7 +22,7 @@ outlayer_userrange_x_high = 25.5 / resolution
 outlayer_userrange_y_low = -30 / resolution
 outlayer_userrange_y_high = 30 / resolution
 
-outer_radius = 30 / resolution
+outer_radius = 50 / resolution
 inner_radius = 20 / resolution
 Num_CELL = 6#7
 NUM_USER = 1 # In asynchronous deep Q learning, only one user in one thread
@@ -63,7 +63,7 @@ class SystemModel3gpp:
       self._move_user()
       self.reward = r
       self.rate = rate
-
+      self.serve_cell_id = action
 
   def _move_user(self):
       """
@@ -93,17 +93,19 @@ class SystemModel3gpp:
       self.rates = get_rate_percell(self.users, cells)
       rate = self.rates[0][action]
 
-      self.count_handover = 0
-
-      if action == self.serve_cell_id:
+      if action == self.serve_cell_id and rate >.5:
           self.reward_handover = 1
-          self.count_handover += 1
           self.handover_indicator[self.count_handover] = 0
-      elif self.handover_indicator[0] == 1:
+          self.count_handover += 1
+      if action == self.serve_cell_id and rate <.5:
+          self.reward_handover = -1
+          self.handover_indicator[self.count_handover] = 0
+          self.count_handover += 1
+      if action != self.serve_cell_id and (self.handover_indicator[0] == 1 or rate>.5):
           self.reward_handover = -1
           self.count_handover = 0
           self.handover_indicator[self.count_handover] = 1
-      elif self.handover_indicator[0] != 1:
+      if action != self.serve_cell_id and self.handover_indicator[0] != 1 and rate>.5:
           self.reward_handover = 1
           self.count_handover = 0
           self.handover_indicator[self.count_handover] = 1

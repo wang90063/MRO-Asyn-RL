@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 import tensorflow as tf
 import numpy as np
-import random
 import time
-import sys
 
 from system_model import SystemModel
 from game_ac_network import GameACLSTMNetwork
@@ -106,7 +104,7 @@ class A3CTrainingThread(object):
       actions.append(action)
       values.append(value_)
 
-      if  (self.thread_index == 0) and(self.local_t % LOG_INTERVAL == 0):#
+      if  (self.thread_index == 2) and(self.local_t % LOG_INTERVAL == 0):#
         print("pi={}".format(pi_))
         print(" V={}".format(value_))
         print("thread", self.thread_index)
@@ -118,14 +116,15 @@ class A3CTrainingThread(object):
 
       self.episode_reward += reward
 
-
+      #
       if self.local_t % 100 == 0 and self.local_t != 0:
-         self.mean_reward = self.episode_reward/100
-         self.episode_reward = 0
+
+        self.episode_reward = 0
       self._record_score(sess, summary_writer, summary_op, score_input,
-                         self.mean_reward, global_t)
-      if  (self.thread_index == 0):
-              print("Thread",  self.thread_index, "reward", reward, "episode_reward", self.episode_reward, "global_t", global_t, "local_t", self.local_t, "rate", self.model.rate, "handover_reward", self.model.reward_handover)
+                           self.episode_reward, global_t)
+        # self.local_network.reset_state()
+      # if  (self.thread_index == 0):
+      #         print("Thread",  self.thread_index, "reward", reward, "episode_reward", self.episode_reward, "global_t", global_t, "local_t", self.local_t, "rate", self.model.rate, "handover_reward", self.model.reward_handover)
 
       # clip reward
       rewards.append(reward)
@@ -137,8 +136,6 @@ class A3CTrainingThread(object):
       self.model.update()
 
       # print("score={}".format(self.episode_reward))
-
-
 
     # mean_num = 1000
     # for number in np.arange(1000):

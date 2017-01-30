@@ -2,32 +2,22 @@
 import threading
 import tensorflow as tf
 import signal
-import math
 import os
 import time
 
 from training_thread_3gpp import TrainingThread3GPP
 
-from constants import ACTION_SIZE
 from constants import PARALLEL_SIZE
-from constants import INITIAL_ALPHA_LOW
-from constants import INITIAL_ALPHA_HIGH
-from constants import INITIAL_ALPHA_LOG_RATE
 from constants import MAX_TIME_STEP
 from constants import CHECKPOINT_DIR
 from constants import LOG_FILE
-from constants import RMSP_EPSILON
-from constants import RMSP_ALPHA
-from constants import GRAD_NORM_CLIP
 
 
 global_t = 0
 
 stop_requested = False
 
-
 training_threads = []
-
 
 for i in range(PARALLEL_SIZE):
     training_thread = TrainingThread3GPP(i, MAX_TIME_STEP)

@@ -22,7 +22,7 @@ outlayer_userrange_x_high = 25.5 / resolution
 outlayer_userrange_y_low = -30 / resolution
 outlayer_userrange_y_high = 30 / resolution
 
-outer_radius = 30 / resolution
+outer_radius = 50 / resolution
 inner_radius = 20 / resolution
 Num_CELL = 6#7
 NUM_USER = 1 # In asynchronous deep Q learning, only one user in one thread
@@ -50,13 +50,17 @@ class SystemModel:
   def __init__(self):
       self.users, self.serve_cell_id, self.last_serve_cell_id= init_users()
       self.handover_indicator = np.zeros(LOCAL_T_MAX)
+      self.reward_handover = 0
 
   def intialize_state(self):
       a = np.zeros(Num_CELL)
       b = np.zeros(2)
+      c = np.zeros(Num_CELL)
       a[np.random.randint(Num_CELL)] = 1
       b[np.random.randint(2)] = 1
-      self.s_t = np.hstack((a, b))
+      c[np.random.randint(Num_CELL)] = 1
+      self.s_t = np.hstack((a, c, b))
+      self.count_handover = 0
 
   def state_update(self, last_action, action):
       """
@@ -68,7 +72,7 @@ class SystemModel:
       r, rate = self._get_reward(action)
       s_t = self._get_state(last_action)
       self._move_user()
-      last_action = action
+      self.rates = get_rate_percell(self.users, cells)
       s_t1 = self._get_state(last_action)
       self.reward = r
       self.s_t = s_t
@@ -104,41 +108,46 @@ class SystemModel:
       :param action: the taken action to obtain "users"
       :return: reward : the weighted sum of rate and reward for handover, i.e. "handover error occurs" -- 0, "handover successes" -- 1
       """
+      reward_weight_rate = 0.5
       self.rates = get_rate_percell(self.users, cells)
       rate = self.rates[0][action]
-      reward_weight_rate = 0.5
-      self.count_handover = 0
 
-      if action == self.serve_cell_id:
+      if action == self.serve_cell_id and rate >0.5:
           self.reward_handover = 1
-          self.count_handover += 1
           self.handover_indicator[self.count_handover] = 0
-      elif self.handover_indicator[0] == 1:
+          self.count_handover += 1
+      if action == self.serve_cell_id and rate <0.5:
+          self.reward_handover = -1
+          self.handover_indicator[self.count_handover] = 0
+          self.count_handover += 1
+      if action != self.serve_cell_id and (self.handover_indicator[0] == 1 or rate<0.5):
           self.reward_handover = -1
           self.count_handover = 0
           self.handover_indicator[self.count_handover] = 1
-      elif self.handover_indicator[0] != 1:
+      if action != self.serve_cell_id and self.handover_indicator[0] != 1 and rate>0.5:
           self.reward_handover = 1
           self.count_handover = 0
           self.handover_indicator[self.count_handover] = 1
       self.last_serve_cell_id = self.serve_cell_id
       self.serve_cell_id = action
 
-      reward = reward_weight_rate * rate + (1-reward_weight_rate) * self.reward_handover
+      reward = reward_weight_rate * rate +(1-reward_weight_rate) *self.reward_handover  #
       return reward, rate
 
   def _get_state(self, last_action):
-      rates = get_rate_percell(self.users, cells)
-      max_num = np.argmax(rates)
+      max_num = np.argmax(self.rates)
       feature_user_rates_vector = np.zeros(Num_CELL)
       feature_user_rates_vector[max_num] = 1
+      feature_serve_vector = np.zeros(Num_CELL)
+      feature_serve_vector[self.last_serve_cell_id] = 1
       feature_handover = np.zeros(2)
-      if last_action == self.last_serve_cell_id:
+      if last_action == self.last_serve_cell_id:  #self.reward_handover == 1:
           feature_handover[0] = 1
       else:
           feature_handover[1] = 1
-      s_t = np.hstack((feature_user_rates_vector,feature_handover))
+      s_t = np.hstack((feature_user_rates_vector,feature_serve_vector ,feature_handover))
 
+      # s_t = feature_user_rates_vector
       return s_t
 
 def init_users():
@@ -174,6 +183,6 @@ def get_rate_percell(users, cells):
           # print (cells[num][1] - users[1]) ** 2
           # print np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 20.0
           norm_distance[num] = np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 45.0 # calculate the distance between user and each base station
-      snr = channels_square * ((norm_distance+0.1) ** -4)  # assume that "p * 10^-12/noise_power = 1" is feasible
+      snr =   channels_square * ((norm_distance+0.1) ** -4)  # assume that "p * 10^-12/noise_power = 1" is feasible
       rates = np.log2(1 + snr)
       return rates
