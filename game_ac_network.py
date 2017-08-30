@@ -77,6 +77,56 @@ class GameACNetwork(object):
     bias   = tf.Variable(tf.random_uniform(bias_shape,   minval=-d, maxval=d))
     return weight, bias
 
+#   # Actor-Critic FF Network
+# class GameACFFNetwork(GameACNetwork):
+#       def __init__(self,
+#                    action_size,
+#                    thread_index,  # -1 for global
+#                    device="/cpu:0"):
+#           GameACNetwork.__init__(self, action_size, thread_index, device)
+#
+#           scope_name = "net_" + str(self._thread_index)
+#           with tf.device(self._device), tf.variable_scope(scope_name) as scope:
+#               self.W_fc1, self.b_fc1 = self._fc_variable([12, 8])  # Feed the data of an agent into FC layer
+#
+#               # weight for policy output layer
+#               self.W_fc2, self.b_fc2 = self._fc_variable([8, action_size])
+#
+#               # weight for value output layer
+#               self.W_fc3, self.b_fc3 = self._fc_variable([8, 1])
+#
+#               # state (input)
+#               self.s = tf.placeholder("float", [None, 12])
+#
+#               h_fc1 = tf.nn.relu(tf.matmul(self.s, self.W_fc1) + self.b_fc1)
+#
+#               # policy (output)
+#               self.pi = tf.nn.softmax(tf.matmul(h_fc1, self.W_fc2) + self.b_fc2)
+#               # value (output)
+#               v_ = tf.matmul(h_fc1, self.W_fc3) + self.b_fc3
+#               self.v = tf.reshape(v_, [-1])
+#
+#       def run_policy_and_value(self, sess, s_t):
+#           pi_out, v_out = sess.run([self.pi, self.v], feed_dict={self.s: [s_t]})
+#           return (pi_out[0], v_out[0])
+#
+#       def run_policy(self, sess, s_t):
+#           pi_out = sess.run(self.pi, feed_dict={self.s: [s_t]})
+#           return pi_out[0]
+#
+#       def run_value(self, sess, s_t):
+#           v_out = sess.run(self.v, feed_dict={self.s: [s_t]})
+#           return v_out[0]
+#
+#       def get_vars(self):
+#           return [self.W_fc1, self.b_fc1,
+#                   self.W_fc2, self.b_fc2,
+#                   self.W_fc3, self.b_fc3]
+
+
+
+
+
 # Actor-Critic LSTM Network
 class GameACLSTMNetwork(GameACNetwork):
   def __init__(self,
@@ -85,10 +135,10 @@ class GameACLSTMNetwork(GameACNetwork):
                device="/cpu:0" ):
     GameACNetwork.__init__(self, action_size, thread_index, device)
 
-    scope_name = "net_" + str(self._thread_index)
-    with tf.device(self._device), tf.variable_scope(scope_name) as scope:
+    scope_name_pi = "pi_net_" + str(self._thread_index)
+    with tf.device(self._device), tf.variable_scope(scope_name_pi) as scope_pi:
 
-      self.W_fc1, self.b_fc1 = self._fc_variable([14, 8]) # Feed the data of an agent into FC layer
+      self.W_fc1, self.b_fc1 = self._fc_variable([12, 8]) # Feed the data of an agent into FC layer
 
       # lstm
       self.lstm = tf.nn.rnn_cell.BasicLSTMCell(8, state_is_tuple=True)
@@ -96,11 +146,8 @@ class GameACLSTMNetwork(GameACNetwork):
       # weight for policy output layer
       self.W_fc2, self.b_fc2 = self._fc_variable([8, action_size])
 
-      # weight for value output layer
-      self.W_fc3, self.b_fc3 = self._fc_variable([8, 1])
-
       # state (input)
-      self.s = tf.placeholder("float", [None, 14])
+      self.s = tf.placeholder("float", [None, 12])
 
       h_fc1 = tf.nn.relu(tf.matmul(self.s, self.W_fc1) + self.b_fc1)
       # h_fc1 shape=(5,256)
@@ -115,7 +162,7 @@ class GameACLSTMNetwork(GameACNetwork):
       self.initial_lstm_state1 = tf.placeholder(tf.float32, [1, 8])
       self.initial_lstm_state = tf.nn.rnn_cell.LSTMStateTuple(self.initial_lstm_state0,
                                                               self.initial_lstm_state1)
-      
+
       # Unrolling LSTM up to LOCAL_T_MAX time steps. (= 5 time steps.)
       # When episode terminates unrolling time steps becomes less than LOCAL_TIME_STEP.
       # Unrolling step size is applied via self.step_size placeholder.
@@ -126,25 +173,30 @@ class GameACLSTMNetwork(GameACNetwork):
                                                         initial_state = self.initial_lstm_state,
                                                         sequence_length = self.step_size,
                                                         time_major = False,
-                                                        scope = scope)
+                                                        scope = scope_pi)
+
 
       # lstm_outputs: (1,5,64) for back prop, (1,1,64) for forward prop.
-      
+
       lstm_outputs = tf.reshape(lstm_outputs, [-1,8])
 
       # policy (output)
       self.pi = tf.nn.softmax(tf.matmul(lstm_outputs, self.W_fc2) + self.b_fc2)
-      
-      # value (output)
-      v_ = tf.matmul(lstm_outputs, self.W_fc3) + self.b_fc3
-      self.v = tf.reshape( v_, [-1])
 
-      scope.reuse_variables()
+      scope_pi.reuse_variables()
       self.W_lstm = tf.get_variable("BasicLSTMCell/Linear/Matrix")
       self.b_lstm = tf.get_variable("BasicLSTMCell/Linear/Bias")
 
       self.reset_state()
-      
+
+    scope_name_val = "val_net_" + str(self._thread_index)
+    with tf.device(self._device), tf.variable_scope(scope_name_val) as scope_val:
+          # weight for value output layer
+          self.W_fc3, self.b_fc3 = self._fc_variable([8, 1])
+
+          # value (output)
+          v_ = tf.matmul(lstm_outputs, self.W_fc3) + self.b_fc3
+          self.v = tf.reshape(v_, [-1])
   def reset_state(self):
     self.lstm_state_out = tf.nn.rnn_cell.LSTMStateTuple(np.zeros([1, 8]),
                                                         np.zeros([1, 8]))
@@ -161,17 +213,17 @@ class GameACLSTMNetwork(GameACNetwork):
     return (pi_out[0], v_out[0])
 
   def run_policy(self, sess, s_t):
-    # This run_policy() is used for displaying the result with display tool.    
+    # This run_policy() is used for displaying the result with display tool.
     pi_out, self.lstm_state_out = sess.run( [self.pi, self.lstm_state],
                                             feed_dict = {self.s : [s_t],
                                                          self.initial_lstm_state0 : self.lstm_state_out[0],
                                                          self.initial_lstm_state1 : self.lstm_state_out[1],
                                                          self.step_size : [1]} )
-                                            
+
     return pi_out[0]
 
   def run_value(self, sess, s_t):
-    # This run_value() is used for calculating V for bootstrapping at the 
+    # This run_value() is used for calculating V for bootstrapping at the
     # end of LOCAL_T_MAX time step sequence.
     # When next sequcen starts, V will be calculated again with the same state using updated network weights,
     # so we don't update LSTM state here.
@@ -181,7 +233,7 @@ class GameACLSTMNetwork(GameACNetwork):
                                       self.initial_lstm_state0 : self.lstm_state_out[0],
                                       self.initial_lstm_state1 : self.lstm_state_out[1],
                                       self.step_size : [1]} )
-    
+
     # roll back lstm state
     self.lstm_state_out = prev_lstm_state_out
     return v_out[0]

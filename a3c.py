@@ -25,6 +25,8 @@ from constants import RMSP_EPSILON
 from constants import RMSP_ALPHA
 from constants import GRAD_NORM_CLIP
 from constants import USE_GPU
+from constants import INITIALIZATION_DIR
+
 
 def log_uniform(lo, hi, rate):
   log_lo = math.log(lo)
@@ -72,15 +74,19 @@ init = tf.global_variables_initializer()
 sess.run(init)
 
 # summary for tensorboard
-score_input = tf.placeholder(tf.int32)
+score_input = tf.placeholder(tf.float32)
+rate_input = tf.placeholder(tf.float32)
+reward_handover_input = tf.placeholder(tf.float32)
 tf.summary.scalar("score", score_input)
-
+tf.summary.scalar("rate", rate_input)
+tf.summary.scalar("reward_handover", reward_handover_input)
 summary_op = tf.summary.merge_all()
 summary_writer = tf.summary.FileWriter(LOG_FILE, sess.graph)
 
 # init or load checkpoint with saver
 saver = tf.train.Saver()
 checkpoint = tf.train.get_checkpoint_state(CHECKPOINT_DIR)
+pretrain = tf.train.get_checkpoint_state(INITIALIZATION_DIR)
 if checkpoint and checkpoint.model_checkpoint_path:
   saver.restore(sess, checkpoint.model_checkpoint_path)
   print("checkpoint loaded:", checkpoint.model_checkpoint_path)
@@ -92,11 +98,21 @@ if checkpoint and checkpoint.model_checkpoint_path:
   wall_t_fname = CHECKPOINT_DIR + '/' + 'wall_t.' + str(global_t)
   with open(wall_t_fname, 'r') as f:
     wall_t = float(f.read())
+elif pretrain and pretrain.model_checkpoint_path:
+    for m in range(PARALLEL_SIZE):
+        var_pi = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="pi_net_" + str(m))
+        saver_pi = tf.train.Saver(var_pi)
+        saver_pi.restore(sess, pretrain.model_checkpoint_path)
+        print("pretrain loaded", pretrain.model_checkpoint_path)
+    var_pi_global = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="pi_net_-1" )
+    saver_pi_global = tf.train.Saver(var_pi_global)
+    saver_pi_global.restore(sess, pretrain.model_checkpoint_path)
+    wall_t = 0.0
 else:
-  print("Could not find old checkpoint")
+    print("Could not find old checkpoint and pretrain")
   # set wall timelog
+    wall_t = 0.0
 
-  wall_t = 0.0
 def train_function(parallel_index):
   global global_t
   
@@ -112,7 +128,7 @@ def train_function(parallel_index):
       break
 
     diff_global_t = training_thread.process(sess, global_t, summary_writer,
-                                            summary_op, score_input)
+                                            summary_op, score_input, rate_input, reward_handover_input)
     global_t += diff_global_t
 
 
