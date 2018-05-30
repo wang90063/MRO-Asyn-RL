@@ -3,7 +3,7 @@ import numpy as np
 
 from game_ac_network import GameACLSTMNetwork
 from system_model import SystemModel
-
+import time
 
 from constants import ACTION_SIZE
 from constants import CHECKPOINT_DIR
@@ -37,7 +37,7 @@ device = "/cpu:0"
 if USE_GPU:
   device = "/gpu:0"
 
-global_t = 0
+
 
 global_network = GameACLSTMNetwork(ACTION_SIZE, -1, device)
 
@@ -65,103 +65,111 @@ checkpoint = tf.train.get_checkpoint_state(CHECKPOINT_DIR)
 if checkpoint and checkpoint.model_checkpoint_path:
   saver.restore(sess, checkpoint.model_checkpoint_path)
   print("checkpoint loaded:", checkpoint.model_checkpoint_path)
+  tokens = checkpoint.model_checkpoint_path.split("-")
+  global_t = int(tokens[1])
+  print(">>> global step set: ", global_t)
+  # set wall time
+  wall_t_fname = CHECKPOINT_DIR + '/' + 'wall_t.' + str(global_t)
+  with open(wall_t_fname, 'r') as f:
+      wall_t = float(f.read())
+else:
+    print("Could not find old checkpoint and pretrain")
 
 
-for ite in range(num_ite):
 
+for ite in range(4):
+    wall_t = 0.0
+
+    start_time = time.time() - wall_t
+    print(ite)
+    episode_count = 0
     local_t = 0
+    count = 0
     csv_write_ho = []
     csv_write_rate = []
     model.intialize_para()
+    episode_reward = 0
+    episode_rate = 0
+    states = []
+    actions = []
+    rewards = []
+    values = []
     while True:
-        if local_t > MAX_TIME_STEP_TEST:
+        if episode_count == 1:
             break
         else:
-            states = []
-            actions = []
-            rewards = []
-            values = []
-            episode_reward = 0
-            episode_rate = 0
-            t = 0
-            for i in range(LOCAL_T_MAX):
-                pi_, value_ = global_network.run_policy_and_value(sess, model.s_t)
-                action = choose_action(pi_)
 
-                states.append(model.s_t)
-                actions.append(action)
-                values.append(value_)
 
-                model.state_update(actions[i - 1], actions[i])
+            pi_, value_ = global_network.run_policy_and_value(sess, model.s_t)
+            action = choose_action(pi_)
 
-                # if  (self.thread_index == 0):
-                #   print(self.model.rate, self.model.test_rates, self.thread_index)
-                # receive game result
-                reward = model.reward
-                terminal = model.terminal
+            states.append(model.s_t)
+            actions.append(action)
+            values.append(value_)
 
-                episode_reward += reward
+            model.state_update(actions[count - 1], actions[count])
 
-                episode_rate += model.rate
-                # if  (self.thread_index == 0):
-                #         print("Thread",  self.thread_index, "reward", reward, "episode_reward", self.episode_reward, "global_t", global_t, "local_t", self.local_t, "rate", self.model.rate, "handover_reward", self.model.reward_handover)
+            reward = model.reward
+            terminal = model.terminal
 
-                # clip reward
-                rewards.append(reward)
+            episode_reward += reward
 
-                t += 1
-                # s_t1 -> s_t
-                model.update()
-                terminal = model.terminal
-                if model.terminal:
-                    break
+            episode_rate += model.rate
 
-            local_t = local_t + t
+            rewards.append(reward)
 
-            print("local_t", local_t, "interval", t, "user", model.users)
+            count += 1
+            # s_t1 -> s_t
+            model.update()
+            terminal = model.terminal
 
-            if terminal:
+            # if terminal:
+            #     handover_ratio = model.count_handover_total / (
+            #         model.count_no_handover + model.count_handover_total + 1)
+            #
+            #     model.count_no_handover = 0
+            #     model.count_handover_total = 0
+            #     episode_count += 1
+            #     print(count, episode_rate / count, episode_count)
+            #     csv_write_ho.append([episode_count, handover_ratio])
+            #     csv_write_rate.append([episode_count, episode_rate/count])
+            #     model.init_users()
+            #     episode_rate = 0
+            #     episode_reward = 0
+            #     global_network.reset_state()
+            #     model.init_users()
+            #     count = 0
+            #     states = []
+            #     actions = []
+            #     rewards = []
+            #     values = []
+
+
+            if time.time()-start_time > 2:
+
                 handover_ratio = model.count_handover_total / (
                     model.count_no_handover + model.count_handover_total + 1)
 
-                record_score(sess, summary_writer, summary_op, score_input,
-                             episode_reward / t, rate_input, episode_rate / t, reward_handover_input,
-                             handover_ratio, local_t)
-                # if local_t % 100 == 0 and local_t != 0:
                 model.count_no_handover = 0
                 model.count_handover_total = 0
-                csv_write_ho.append([local_t, handover_ratio])
-                csv_write_rate.append([local_t, episode_rate / t])
+                episode_count += 1
+                print(count,episode_rate / count, handover_ratio)
+                csv_write_ho.append([episode_count, handover_ratio])
+                csv_write_rate.append([episode_count, episode_rate / count])
+                count = 0
                 model.init_users()
                 episode_rate = 0
                 episode_reward = 0
                 global_network.reset_state()
-                model.init_users()
+                states = []
+                actions = []
+                rewards = []
+                values = []
 
+    write_plot_ho = np.asarray(csv_write_ho)
+    fname = PLOT_RL_HO_DIR + '/' + 'HO' + 'ite'+'-'+str(ite) + '.csv'
+    np.savetxt(fname, write_plot_ho, delimiter=',')
 
-            else:
-
-                handover_ratio = model.count_handover_total / (
-                    model.count_no_handover + model.count_handover_total + 1)
-
-                record_score(sess, summary_writer, summary_op, score_input,
-                             episode_reward / t, rate_input, episode_rate / t, reward_handover_input,
-                             handover_ratio, local_t)
-                # if local_t % 100 == 0 and local_t != 0:
-                #     model.count_no_handover = 0
-                #     model.count_handover_total = 0
-                csv_write_ho.append([local_t, handover_ratio])
-                csv_write_rate.append([local_t, episode_rate / t])
-                model.init_users()
-                episode_rate = 0
-                episode_reward = 0
-                global_network.reset_state()
-
-
-            write_plot_ho = np.asarray(csv_write_ho)
-            fname = PLOT_RL_HO_DIR + '/' + 'HO' + 'ite' + '-' + str(ite) + '.csv'
-            np.savetxt(fname, write_plot_ho, delimiter=",")
-
-            write_plot_rate = np.asarray(csv_write_rate)
-            gname = PLOT_RL_rate_DIR + '/' + 'HO' + 'ite' + '-' + str(ite) + '.csv'
-            np.savetxt(gname, write_plot_rate, delimiter=",")
+    write_plot_rate = np.asarray(csv_write_rate)
+    fname = PLOT_RL_rate_DIR + '/' + 'rate' + 'ite'+'-'+str(ite)  + '.csv'
+    np.savetxt(fname, write_plot_rate, delimiter=',')

@@ -20,17 +20,34 @@ for m in range(slot):
   threshold = 4.5+m/slot
   actions = []
   states = []
-  for i in range(num_train_data/slot):
-    if i == 0:
-      action = choose_action(model.last_serve_cell_id,threshold)
-      actions.append(action)
-    else:
-      action = choose_action(actions[i-1],threshold)
-      actions.append(action)
-    for j in range(2 * ACTION_SIZE):
-        states.append(model.s_t[j])
-    model.state_update(actions[i - 1], actions[i])
-    model.update()
+  i=0
+  while 1!=0:
+      if i==0:
+         action = choose_action(model.last_serve_cell_id,threshold)
+         actions.append(action)
+      else:
+         action = choose_action(actions[i-1],threshold)
+         actions.append(action)
+
+      for j in range(2 * ACTION_SIZE):
+           states.append(model.s_t[j])
+
+      model.state_update(actions[i - 1], actions[i])
+      model.update()
+
+      if model.terminal ==True:
+          break
+  # for i in range(num_train_data/slot):
+  #   if i == 0:
+  #     action = choose_action(model.last_serve_cell_id,threshold)
+  #     actions.append(action)
+  #   else:
+  #     action = choose_action(actions[i-1],threshold)
+  #     actions.append(action)
+  #   for j in range(2 * ACTION_SIZE):
+  #       states.append(model.s_t[j])
+  #   model.state_update(actions[i - 1], actions[i])
+  #   model.update()
 
   with open("predata/data.txt",'a') as f:
      for state in states:
@@ -50,6 +67,9 @@ for m in range(slot):
   model.init_users()
   states_test = []
   actions_test = []
+
+
+
   for i in range(num_test_data/slot):
     if i == 0:
       action_test_c = choose_action(model_test.last_serve_cell_id,threshold)

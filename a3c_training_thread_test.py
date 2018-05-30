@@ -57,6 +57,8 @@ class A3CTrainingThread(object):
 
         self.episode_rate_ave = 0
 
+        self.episode_count_local = 0
+
         self.initial_learning_rate = initial_learning_rate
 
         self.episode_reward = 0
@@ -93,6 +95,7 @@ class A3CTrainingThread(object):
 
         start_local_t = self.local_t
 
+
         start_lstm_state = self.local_network.lstm_state_out
 
         t = 0
@@ -124,7 +127,6 @@ class A3CTrainingThread(object):
             # if  (self.thread_index == 0):
             #         print("Thread",  self.thread_index, "reward", reward, "episode_reward", self.episode_reward, "global_t", global_t, "local_t", self.local_t, "rate", self.model.rate, "handover_reward", self.model.reward_handover)
 
-
             rewards.append(reward)
 
             # print ('rewards', rewards)
@@ -138,31 +140,6 @@ class A3CTrainingThread(object):
             if self.model.terminal:
                 break
 
-        if terminal:
-            terminal_end = True
-            self.handover_ratio = self.model.count_handover_total / (
-                self.model.count_no_handover + self.model.count_handover_total + 1)
-            self.episode_rate_ave = self.episode_rate / t
-            if self.local_t % 100 == 0 and self.local_t != 0:
-                self.model.count_no_handover = 0
-                self.model.count_handover_total = 0
-            self.episode_rate = 0
-            self.episode_reward = 0
-            self.local_network.reset_state()
-            self.model.init_users()
-
-        else:
-
-            self.handover_ratio = self.model.count_handover_total / (
-                self.model.count_no_handover + self.model.count_handover_total + 1)
-            self.episode_rate_ave = self.episode_rate / t
-            if self.local_t % 100 == 0 and self.local_t != 0:
-                self.model.count_no_handover = 0
-                self.model.count_handover_total = 0
-            self.episode_rate = 0
-            self.episode_reward = 0
-            self.local_network.reset_state()
-            self.model.init_users()
         R = 0.0
         if not terminal_end:
             R = self.local_network.run_value(sess, self.model.s_t)

@@ -2,15 +2,16 @@
 import tensorflow as tf
 import numpy as np
 import time
-
+# from system_model_dif import SystemModel_dif
 from system_model import SystemModel
+# from system_model_wrong import SystemModel_wrong
 from game_ac_network import GameACLSTMNetwork
 from constants import GAMMA
 from constants import LOCAL_T_MAX
 from constants import ENTROPY_BETA
 from constants import ACTION_SIZE
 from constants import MAX_TIME_STEP
-LOG_INTERVAL = 100
+LOG_INTERVAL = 1000
 PERFORMANCE_LOG_INTERVAL = 1000
 
 class A3CTrainingThread(object):
@@ -46,7 +47,12 @@ class A3CTrainingThread(object):
       self.gradients )
       
     self.sync = self.local_network.sync_from(global_network)
-    
+
+    # if self.thread_index >=2 :
+    #    self.model = SystemModel_dif()
+    # # # elif self.thread_index == 5 :
+    # # #    self.model = SystemModel_wrong()
+    # # else:
     self.model = SystemModel()
     
     self.local_t = 0
@@ -55,6 +61,7 @@ class A3CTrainingThread(object):
 
     self.episode_rate_ave = 0
 
+    self.episode_count_local = 0
 
     self.initial_learning_rate = initial_learning_rate
 
@@ -63,8 +70,7 @@ class A3CTrainingThread(object):
     # variable controling log output
     self.prev_local_t = 0
     # get the initial state from the initial action
-    self.model.intialize_para()
-    self.mean_reward = 0
+    # self.model.intialize_para()
   def _anneal_learning_rate(self, global_time_step):
     learning_rate = self.initial_learning_rate * (self.max_global_time_step - global_time_step) / self.max_global_time_step
     if learning_rate < 0.0:
@@ -74,17 +80,17 @@ class A3CTrainingThread(object):
   def choose_action(self, pi_values):
     return np.random.choice(range(len(pi_values)), p=pi_values)
 
-  def _record_score(self, sess, summary_writer, summary_op, score_input, score, rate_input, rate, reward_handover_input, reward_handover, global_t):
+  def _record_score(self, sess, summary_writer, summary_op, score_input, score, global_t):# rate_input, rate, reward_handover_input, reward_handover,
     summary_str = sess.run(summary_op, feed_dict={
-      score_input: score, rate_input:rate, reward_handover_input:reward_handover
-    })
+      score_input: score})
+    # , rate_input:rate, reward_handover_input:reward_handover
     summary_writer.add_summary(summary_str, global_t)#
     summary_writer.flush()
     
   def set_start_time(self, start_time):
     self.start_time = start_time
 
-  def process(self, sess, global_t, summary_writer, summary_op, score_input, rate_input,  reward_handover_input):
+  def process(self, sess, global_t, summary_writer, summary_op, score_input):#, rate_input,  reward_handover_input):
     states = []
     actions = []
     rewards = []
@@ -96,6 +102,8 @@ class A3CTrainingThread(object):
     sess.run( self.sync )
 
     start_local_t = self.local_t
+
+    start_episode_count = self.episode_count_local
 
     start_lstm_state = self.local_network.lstm_state_out
 
@@ -145,33 +153,38 @@ class A3CTrainingThread(object):
     #self.episode_reward / t
     if terminal:
        terminal_end = True
-       self.handover_ratio = self.model.count_handover_total / (
-         self.model.count_no_handover + self.model.count_handover_total + 1)
-       self.episode_rate_ave = self.episode_rate / t
+       # self.episode_count_local +=1
+       # self.handover_ratio = self.model.count_handover_total / (
+       #   self.model.count_no_handover + self.model.count_handover_total + 1)
+       # self.episode_rate_ave = self.episode_rate / t
+       # self.episode_reward_ave = self.episode_reward / t
        self._record_score(sess, summary_writer, summary_op, score_input,
-                          value_, rate_input, self.episode_rate_ave, reward_handover_input,
-                          self.handover_ratio, global_t)
-       if self.local_t % 100 == 0 and self.local_t != 0:
-         self.model.count_no_handover = 0
-         self.model.count_handover_total = 0
-       self.episode_rate = 0
-       self.episode_reward = 0
-       self.local_network.reset_state()
+                          value_, global_t)\
+         # , rate_input, self.episode_rate_ave, reward_handover_input,
+         #                  self.handover_ratio) #value_
+       # if self.local_t % 100 == 0 and self.local_t != 0:
+       # self.model.count_no_handover = 0
+       # self.model.count_handover_total = 0
+       # self.episode_rate = 0
+       # self.episode_reward = 0
+       # self.local_network.reset_state()
        self.model.init_users()
 
     else:
 
-       self.handover_ratio = self.model.count_handover_total / (
-       self.model.count_no_handover + self.model.count_handover_total +1)
-       self.episode_rate_ave = self.episode_rate / t
+       # self.handover_ratio = self.model.count_handover_total / (
+       # self.model.count_no_handover + self.model.count_handover_total +1)
+       # self.episode_rate_ave = self.episode_rate / t
+       # self.episode_reward_ave = self.episode_reward / t
        self._record_score(sess, summary_writer, summary_op, score_input,
-                          value_, rate_input,self.episode_rate_ave, reward_handover_input,
-                          self.handover_ratio, global_t)
-       if self.local_t %100 == 0 and self.local_t !=0:
-          self.model.count_no_handover = 0
-          self.model.count_handover_total = 0
-       self.episode_rate = 0
-       self.episode_reward = 0
+                          value_, global_t)
+                          # , rate_input,self.episode_rate_ave, reward_handover_input,
+                          # self.handover_ratio)
+       # if self.local_t %100 == 0 and self.local_t !=0:
+       # self.model.count_no_handover = 0
+       # self.model.count_handover_total = 0
+       # self.episode_rate = 0
+       # self.episode_reward = 0
        # self.local_network.reset_state()
        # self.model.init_users()
     R = 0.0
@@ -224,15 +237,17 @@ class A3CTrainingThread(object):
     #              self.local_network.td: batch_td,
     #              self.local_network.r: batch_R,
     #              self.learning_rate_input: cur_learning_rate})
-    if ((self.thread_index == 0) ):
-        print(self.model.users)
-    if ((self.thread_index == 0) ) and (self.local_t - self.prev_local_t >= PERFORMANCE_LOG_INTERVAL):
+
+    # if ((self.thread_index == 0) ):
+    #     print(self.model.users)
+    if ((self.thread_index == 0) ) and(self.local_t - self.prev_local_t >= PERFORMANCE_LOG_INTERVAL): #
       self.prev_local_t += PERFORMANCE_LOG_INTERVAL
       elapsed_time = time.time() - self.start_time
       steps_per_sec = global_t / elapsed_time
-      print("### Performance : {} loss {} STEPS in {:.0f} sec. {:.0f} STEPS/sec. {:.2f}M STEPS/hour".format(
-        loss_value, global_t,  elapsed_time, steps_per_sec, steps_per_sec * 3600 / 1000000.))
+      print("### Performance :{} thread {} loss {} STEPS in {:.0f} sec. {:.0f} STEPS/sec. {:.2f}M STEPS/hour".format(
+          self.thread_index,loss_value, global_t,  elapsed_time, steps_per_sec, steps_per_sec * 3600 / 1000000.))
 
     # return advanced local step size
     diff_local_t = self.local_t - start_local_t
+    diff_episode_count = self.episode_count_local - start_episode_count
     return diff_local_t

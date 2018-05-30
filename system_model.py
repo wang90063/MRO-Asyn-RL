@@ -1,16 +1,17 @@
-import pygame
+
 import sys
 import random
 import numpy as np
-from pygame.locals import *
+
 from constants import LOCAL_T_MAX
 from collections import Counter
 from math import exp
-
+from constants import direction
+from constants import  direction_index
 # 400 pixels represent the largest distance of the area, i.e. 100m
-WINDOW_WIDTH = 400  # size of window's width in pixels
-WINDOW_HEIGHT = 400  # size of windows' height in pixels
-cell_radius = 25 # "m" this is the radius of cell
+WINDOW_WIDTH = 400 *40 # size of window's width in pixels
+WINDOW_HEIGHT = 400 *40# size of windows' height in pixels
+cell_radius = 4 # "m" this is the radius of cell
 resolution  = cell_radius * 4./WINDOW_WIDTH # meter/pixel, the longest distace in the simulation system is "cell_radius * 4"
 
 outlayer_userrange_x_low = -30 / resolution
@@ -36,8 +37,9 @@ cell_id = np.arange(Num_CELL)
 # cell_x = [200, 200, 370, 370, 200, 30, 30]
 # cell_y = [200, 0, 100, 300, 400, 300, 100]
 
-cell_x = [ 0.0, 170.0, 170.0, 0.0, -170, -170]
-cell_y = [ 200.0, 100.0, -100.0, -200.0, -100, 100]
+cell_x = [ 0.0, 170.0*40, 170.0*40, 0.0, -170*40, -170*40]
+cell_y = [ 200.0*40, 100.0*40, -100.0*40, -200.0*40, -100*40, 100*40]
+
 
 cells = np.vstack((cell_x, cell_y,cell_id)).T
 
@@ -46,18 +48,19 @@ cells = np.vstack((cell_x, cell_y,cell_id)).T
 class SystemModel:
   def __init__(self):
       self.init_users()
-      self.s_t = self._get_state(self)
+      self.s_t = self._get_state()
       self.handover_indicator = 0  #np.zeros(LOCAL_T_MAX)
       self.reward_handover = 0
-      self.handover_consumption =2.3#0.43#2.3
+      self.handover_consumption =7.5
       self.terminal = False
-
-  def intialize_para(self):
-      self.count_no_handover = 0
-      self.count_no_failure = 0
-      self.count_failure = 0
-      self.count_handover_total=0
-      self.count_handover = 0
+      self.direction = direction
+      self.direction_index = direction_index
+  # def intialize_para(self):
+  #     self.count_no_handover = 0
+  #     self.count_no_failure = 0
+  #     self.count_failure = 0
+  #     self.count_handover_total=0
+  #     self.count_handover = 0
 
 
   def state_update(self, last_action, action):
@@ -68,12 +71,12 @@ class SystemModel:
               last_action
       """
       self.rates = get_rate_percell(self.users, cells)
-      s_t = self._get_state(last_action)
+      s_t = self._get_state()
       r, rate = self._get_reward(last_action,action)
       self.test_rates=self.rates
       self._move_user()
       self.rates = get_rate_percell(self.users, cells)
-      s_t1 = self._get_state(last_action)
+      s_t1 = self._get_state()
       self.reward = r
       self.s_t = s_t
       self.s_t1 = s_t1
@@ -89,21 +92,13 @@ class SystemModel:
       low mobility users are considered, i.e. the user only move one pixel every frame. different mobility trajectories will be tested to present the robustness of the neural network
       """
       self.terminal = False
-      mobility_speed = 1
-      move_x = random.randint(-mobility_speed, mobility_speed)
-      user_x_tmp = self.users[0] + move_x
-      move_y = random.randint(-mobility_speed, mobility_speed)
-      user_y_tmp = self.users[1] + move_y
+      mobility_speed = 1  # np.random.randint(1, 3)
+      index = np.random.choice(self.direction_index, p=[0.25, 0.25, 0.25, 0.25])
+      self.users = self.users + self.direction[index] * mobility_speed
 
-      if np.abs(user_x_tmp) > np.sqrt(3)/2.0 * outer_radius or (np.abs(user_x_tmp)+np.abs(user_y_tmp)/np.sqrt(3)) > outer_radius: #and (np.abs(user_x_tmp) > np.sqrt(3)/2.0*inner_radius or (np.abs(user_x_tmp)+np.abs(user_y_tmp)/np.sqrt(3)) > inner_radius):
+      if np.abs(self.users[0]) > WINDOW_WIDTH/2or np.abs(self.users[1]) > WINDOW_WIDTH/2:#np.abs(self.users[0]) > np.sqrt(3)/2.0 * outer_radius or (np.abs(self.users[0])+np.abs(self.users[1])/np.sqrt(3)) > outer_radius: #and (np.abs(user_x_tmp) > np.sqrt(3)/2.0*inner_radius or (np.abs(user_x_tmp)+np.abs(user_y_tmp)/np.sqrt(3)) > inner_radius):
           self.terminal = True
-          user_x = user_x_tmp
-          user_y = user_y_tmp
-      else:
-          user_x = user_x_tmp
-          user_y = user_y_tmp
 
-      self.users = np.hstack((user_x, user_y))
 
   def _get_reward(self, last_action, action):
       """
@@ -120,10 +115,10 @@ class SystemModel:
 
       if action == last_action:
          self.handover_indicator = 0
-         self.count_no_handover += 1.0
+         # self.count_no_handover += 1.0
       else:
          self.handover_indicator = 1
-         self.count_handover_total += 1.0
+         # self.count_handover_total += 1.0
 
       reward = rate -  self.handover_indicator * self.handover_consumption
       # if action == last_action and self.count_handover < LOCAL_T_MAX :#andrate >0.5
@@ -224,10 +219,7 @@ class SystemModel:
       # reward = self.reward_handover
       return reward, rate
 
-  def _get_state(self, action):
-      max_num = np.argmax(self.rates)
-      feature_user_rates_vector = np.zeros(Num_CELL)
-      feature_user_rates_vector[max_num] = 1
+  def _get_state(self):
       feature_serve_vector = np.zeros(Num_CELL)
       feature_serve_vector[self.serve_cell_id] = 1
       # feature_handover = np.zeros(2)
@@ -235,6 +227,7 @@ class SystemModel:
       #     feature_handover[0] = 1
       # else:
       #     feature_handover[1] = 1
+      # s_t = self.rates
       s_t = np.hstack((self.rates,feature_serve_vector))#feature_user_rates_vector,feature_handover
 
       # s_t = feature_user_rates_vector
@@ -249,9 +242,9 @@ class SystemModel:
     :return: user: (1) loc_x(center) (2) loc_y(center) (3) which cell user is in (4) user mobility type
     """
     while True:
-        user_x_tmp = np.random.randint(outlayer_userrange_x_low, outlayer_userrange_x_high+1, size=NUM_USER, dtype='int')
-        user_y_tmp = np.random.randint(outlayer_userrange_y_low, outlayer_userrange_y_high+1, size=NUM_USER, dtype='int')
-        if np.abs(user_x_tmp) < np.sqrt(3)/2.0 * outer_radius and (np.abs(user_x_tmp)+np.abs(user_y_tmp)/np.sqrt(3)) < outer_radius: #and (np.abs(user_x_tmp) > np.sqrt(3)/2.0*inner_radius or (np.abs(user_x_tmp)+np.abs(user_y_tmp)/np.sqrt(3)) > inner_radius):
+        user_x_tmp = np.random.randint(-40, -20, size=NUM_USER, dtype='int')
+        user_y_tmp = np.random.randint(-40, -20, size=NUM_USER, dtype='int')
+        if np.abs(user_x_tmp)<WINDOW_WIDTH/2 and np.abs(user_y_tmp)<WINDOW_WIDTH/2:#np.abs(user_x_tmp) < np.sqrt(3)/2.0 * outer_radius and (np.abs(user_x_tmp)+np.abs(user_y_tmp)/np.sqrt(3)) < outer_radius: #and (np.abs(user_x_tmp) > np.sqrt(3)/2.0*inner_radius or (np.abs(user_x_tmp)+np.abs(user_y_tmp)/np.sqrt(3)) > inner_radius):
            user_x = user_x_tmp
            user_y = user_y_tmp
            break
@@ -264,14 +257,16 @@ def get_rate_percell(users, cells):
       """
       get the rates of the user in all the cells if this user connects to the cell. return the array "rate" to represent the rate in the cells
       """
-      channels_square = np.random.rayleigh(1, Num_CELL)  # the fast fading from the user to all the cells
+      channels_square = np.random.normal(0,1, Num_CELL)  # the fast fading from the user to all the cells
       norm_distance = np.zeros(Num_CELL)
+      shadow_fading = np.random.lognormal(mean=0,sigma=0.8,size=Num_CELL)
       for num in cell_id:
           # print(num)
           # print (cells[num][0] - users[0]) ** 2
           # print (cells[num][1] - users[1]) ** 2
           # print np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution / 20.0
-          norm_distance[num] = np.sqrt((cells[num][0] - users[0]) ** 2 + (cells[num][1] - users[1]) ** 2) * resolution/50 # calculate the distance between user and each base station
-      snr =   channels_square * ((norm_distance+0.1) ** -4)  # assume that "p * 10^-12/noise_power = 1" is feasible
-      rates = np.log2(1 + snr)
+          norm_distance[num] = np.sqrt((cells[num][0] - users[0]) ** 2.0 + (cells[num][1] - users[1]) ** 2) * resolution# calculate the distance between user and each base station
+      large_scale = 10**((-36.7 * np.log10(norm_distance*10**-3)-149.5+shadow_fading)/10)#+10**-8
+      snr =   channels_square**2 * large_scale  # assume that "p * 10^-12/noise_power = 1" is feasible
+      rates = np.log2(1 + 10**7*snr)
       return rates
